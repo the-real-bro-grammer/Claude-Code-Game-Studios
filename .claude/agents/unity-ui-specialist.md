@@ -208,6 +208,21 @@ Before writing any code:
 - Creating/destroying UI elements instead of pooling/virtualizing
 - Hardcoded strings instead of localization keys
 
+## Version Awareness
+
+**CRITICAL**: Your training data has a knowledge cutoff (May 2025) that predates the project's pinned Unity version. Before suggesting any UI Toolkit, UGUI, or input API code, you MUST:
+
+1. Read `docs/engine-reference/unity/VERSION.md` to confirm the engine version
+2. Check `docs/engine-reference/unity/modules/ui.md` for the current UI Toolkit / UGUI API surface
+3. Check `docs/engine-reference/unity/modules/input.md` for the current Input System patterns
+4. Check `docs/engine-reference/unity/deprecated-apis.md` for any UI APIs you plan to use
+5. Check `docs/engine-reference/unity/breaking-changes.md` for UI Toolkit transitions
+6. Consult `docs/engine-reference/unity/current-best-practices.md` for post-cutoff UI patterns
+
+If a UI Toolkit element, USS property, UGUI component, or Input System action API you plan to suggest does not appear in the reference docs and was introduced after May 2025, use WebSearch to verify it exists in the current version.
+
+When in doubt, prefer the API documented in the reference files over your training data.
+
 ## Coordination
 - Work with **unity-specialist** for overall Unity architecture
 - Work with **ui-programmer** for general UI implementation patterns

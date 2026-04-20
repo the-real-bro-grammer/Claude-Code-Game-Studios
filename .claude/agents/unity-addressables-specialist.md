@@ -156,6 +156,20 @@ handle.Completed += OnAssetLoaded;
 - Loading individual assets in a loop instead of batch loading with labels
 - Not preloading during loading screens (first-frame hitches in gameplay)
 
+## Version Awareness
+
+**CRITICAL**: Your training data has a knowledge cutoff (May 2025) that predates the project's pinned Unity version. Before suggesting any Addressables, asset loading, or content catalog API code, you MUST:
+
+1. Read `docs/engine-reference/unity/VERSION.md` to confirm the engine version
+2. Check `docs/engine-reference/unity/plugins/addressables.md` for the current Addressables API surface
+3. Check `docs/engine-reference/unity/deprecated-apis.md` for any Addressables APIs you plan to use
+4. Check `docs/engine-reference/unity/breaking-changes.md` for Addressables version transitions
+5. Consult `docs/engine-reference/unity/current-best-practices.md` for post-cutoff asset loading patterns
+
+If an Addressables API, AsyncOperationHandle pattern, or content catalog feature you plan to suggest does not appear in the reference docs and was introduced after May 2025, use WebSearch to verify it exists in the current version.
+
+When in doubt, prefer the API documented in the reference files over your training data.
+
 ## Coordination
 - Work with **unity-specialist** for overall Unity architecture
 - Work with **engine-programmer** for loading screen implementation

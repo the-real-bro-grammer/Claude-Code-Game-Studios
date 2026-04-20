@@ -37,7 +37,7 @@
 #   Each entry: name, status, source, referenced_by[], attributes{}, added, revised
 
 version: 1
-last_updated: ""
+last_updated: 2026-04-20
 
 # ─── ENTITIES ────────────────────────────────────────────────────────────────
 # Named game-world objects: enemies, NPCs, characters, factions, bosses.
@@ -106,7 +106,51 @@ items: []
 #   output_range[min, max], added
 # Optional: expression (the actual formula), notes
 
-formulas: []
+formulas:
+  - name: NormalizedProbability
+    status: active
+    source: design/gdd/data-registry.md
+    referenced_by:
+      - design/gdd/data-registry.md
+    variables:
+      - W_i
+      - W_total
+      - P_i
+    output_range: [0, 1]
+    expression: "P_i = W_i / W_total"
+    notes: "Runtime normalization of LootTable weights. Designer authors raw positive weights; runtime computes normalized probabilities. OnValidate only enforces W_i > 0 and W_total > 0 — no sum-to-1 check. Consumers that roll loot (Collection System, Gopher Spawn) must respect the normalized distribution."
+    added: 2026-04-20
+    revised: ""
+
+  - name: EfficiencyRatio
+    status: active
+    source: design/gdd/data-registry.md
+    referenced_by:
+      - design/gdd/data-registry.md
+    variables:
+      - E_norm
+      - C_base
+    output_range: [0, 999]
+    expression: "EfficiencyRatio = E_norm / C_base"
+    notes: "Pillar 3 balance audit hook on ToolConfig. E_norm is OBJECTIVE (derived from authored ToolConfig parameters, not a designer-editable float) — Ramps: angle range/180°; Nets: catch area/max catch area; Guard Posts: coverage radius/max radius. Dominance rule: flag if ratio > 2× within-category arithmetic mean unless _dominanceJustified = true AND _justificationNote is non-empty (≥ 30 chars). Category-wide threshold: if > 30% of a category has _dominanceJustified, Balance Audit window shows blocking modal requiring lead sign-off. Tool System GDD (pending) must declare the objective derivation rule for each tool type."
+    added: 2026-04-20
+    revised: ""
+
+  - name: QuotaAchievabilityCeiling
+    status: active
+    source: design/gdd/data-registry.md
+    referenced_by:
+      - design/gdd/data-registry.md
+    variables:
+      - H
+      - EV_loot
+      - L_budget
+      - C_rate
+    output_range: [0, 10800]
+    expression: "Ceiling = H * EV_loot * L_budget * C_rate"
+    notes: "Author-time simulation run by LevelData OnValidate. Worst-case: C_rate = 0.6 (worst allowed tool loadout + slowest gopher rhythm). Pass/Warning/Error bands: PASS if Ceiling >= Quota / 0.95; WARNING if Quota <= Ceiling < Quota / 0.95 (inclusive of Ceiling == Quota boundary per EC-F1); ERROR if Ceiling < Quota (blocks merge). Escape valve: LootTable with _excludeFromQuotaSimulation = true skips contribution (decoy gophers). Level Runtime and Level Scoring GDDs (pending) must respect the quota ceiling gate."
+    added: 2026-04-20
+    revised: ""
 
 # Example:
 #
@@ -139,7 +183,51 @@ formulas: []
 #
 # Required fields: name, status, source, referenced_by, value, unit, added
 
-constants: []
+constants:
+  - name: t1_latency_max
+    status: active
+    source: design/gdd/event-bus.md
+    referenced_by:
+      - design/gdd/event-bus.md
+    value: 16.67
+    unit: milliseconds
+    notes: "Hard latency ceiling for T1-tier events (same-frame response). Derived from 60fps frame budget. Enforces Pillar 5 ('No Input Goes Silent') on input response, collection, slapstick hazards. AC-F4 + AC-P3 in Event Bus GDD; AC-F6 extends to end-to-end input→render."
+    added: 2026-04-20
+    revised: ""
+
+  - name: t2_latency_max
+    status: active
+    source: design/gdd/event-bus.md
+    referenced_by:
+      - design/gdd/event-bus.md
+    value: 100
+    unit: milliseconds
+    notes: "Feedback Floor budget (Pillar 5 contract). Applies to T2-tier events (state changes, economy updates, AI signals) AND to end-to-end input→render contract via AC-F6. VFX/Juice, HUD, Collection, Tool, Hazard, Critter AI GDDs must honor this."
+    added: 2026-04-20
+    revised: ""
+
+  - name: feedback_channel_regex
+    status: active
+    source: design/gdd/data-registry.md
+    referenced_by:
+      - design/gdd/data-registry.md
+      - design/gdd/event-bus.md
+    value: "^(audio|vfx)\\.[a-z_]+\\.[a-z_]+\\.[a-z_]+$"
+    unit: regex
+    notes: "Format regex for Feedback-namespace event IDs in AudioEventTaxonomy and VisualEventTaxonomy. Enforced by Data Registry R7 at editor time; Event Bus R3 uses generated constants derived from these IDs. Any change requires migration of every emitting system's event ID string — treat as architecture change."
+    added: 2026-04-20
+    revised: ""
+
+  - name: gameplay_channel_regex
+    status: active
+    source: design/gdd/event-bus.md
+    referenced_by:
+      - design/gdd/event-bus.md
+    value: "^gameplay\\.[a-z_]+\\.[a-z_]+$"
+    unit: regex
+    notes: "Format regex for Gameplay-namespace event IDs (internal events: phase_changed, quota_progress, banked, gopher.launched, etc.). Event Bus R5 enforces namespace distinction from Feedback."
+    added: 2026-04-20
+    revised: ""
 
 # Example:
 #

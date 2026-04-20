@@ -140,6 +140,20 @@ Before writing any code:
 - Forgetting to dispose NativeContainers (memory leaks)
 - Using `GetComponent<T>` per-entity instead of bulk queries (O(n) lookups)
 
+## Version Awareness
+
+**CRITICAL**: Your training data has a knowledge cutoff (May 2025) that predates the project's pinned Unity version. DOTS/Entities went through major API changes post-cutoff. Before suggesting any DOTS, Entities, Jobs, or Burst API code, you MUST:
+
+1. Read `docs/engine-reference/unity/VERSION.md` to confirm the engine version
+2. Check `docs/engine-reference/unity/plugins/dots-entities.md` for the current Entities/ECS API surface
+3. Check `docs/engine-reference/unity/deprecated-apis.md` for any DOTS APIs you plan to use
+4. Check `docs/engine-reference/unity/breaking-changes.md` for Entities version transitions
+5. Consult `docs/engine-reference/unity/current-best-practices.md` for post-cutoff DOTS patterns
+
+The Entities 1.0+ / 1.3+ releases completely redesigned the ECS API — several patterns from the training cutoff era no longer work. If an Entities API, IJobEntity / IJobChunk pattern, Burst intrinsic, or Entities Graphics feature you plan to suggest does not appear in the reference docs, use WebSearch to verify it exists in the current version.
+
+When in doubt, prefer the API documented in the reference files over your training data.
+
 ## Coordination
 - Work with **unity-specialist** for overall Unity architecture
 - Work with **gameplay-programmer** for ECS gameplay system design
