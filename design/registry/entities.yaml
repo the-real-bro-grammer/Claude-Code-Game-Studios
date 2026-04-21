@@ -37,7 +37,7 @@
 #   Each entry: name, status, source, referenced_by[], attributes{}, added, revised
 
 version: 1
-last_updated: 2026-04-20
+last_updated: 2026-04-20  # Save/Load GDD completed — 3 referenced_by additions (t1/t2_latency_max + gameplay_channel_regex)
 
 # ─── ENTITIES ────────────────────────────────────────────────────────────────
 # Named game-world objects: enemies, NPCs, characters, factions, bosses.
@@ -189,9 +189,10 @@ constants:
     source: design/gdd/event-bus.md
     referenced_by:
       - design/gdd/event-bus.md
+      - design/gdd/save-load.md
     value: 16.67
     unit: milliseconds
-    notes: "Hard latency ceiling for T1-tier events (same-frame response). Derived from 60fps frame budget. Enforces Pillar 5 ('No Input Goes Silent') on input response, collection, slapstick hazards. AC-F4 + AC-P3 in Event Bus GDD; AC-F6 extends to end-to-end input→render."
+    notes: "Hard latency ceiling for T1-tier events (same-frame response). Derived from 60fps frame budget. Enforces Pillar 5 ('No Input Goes Silent') on input response, collection, slapstick hazards. AC-F4 + AC-P3 in Event Bus GDD; AC-F6 extends to end-to-end input→render. Save/Load explicitly opts OUT of T1 participation — async flushes run after feedback fires, not before."
     added: 2026-04-20
     revised: ""
 
@@ -200,9 +201,10 @@ constants:
     source: design/gdd/event-bus.md
     referenced_by:
       - design/gdd/event-bus.md
+      - design/gdd/save-load.md
     value: 100
     unit: milliseconds
-    notes: "Feedback Floor budget (Pillar 5 contract). Applies to T2-tier events (state changes, economy updates, AI signals) AND to end-to-end input→render contract via AC-F6. VFX/Juice, HUD, Collection, Tool, Hazard, Critter AI GDDs must honor this."
+    notes: "Feedback Floor budget (Pillar 5 contract). Applies to T2-tier events (state changes, economy updates, AI signals) AND to end-to-end input→render contract via AC-F6. VFX/Juice, HUD, Collection, Tool, Hazard, Critter AI GDDs must honor this. Save/Load explicitly opts OUT — save writes are a consequence of an input, not the input itself, and do not participate in the Feedback Floor."
     added: 2026-04-20
     revised: ""
 
@@ -223,9 +225,10 @@ constants:
     source: design/gdd/event-bus.md
     referenced_by:
       - design/gdd/event-bus.md
+      - design/gdd/save-load.md
     value: "^gameplay\\.[a-z_]+\\.[a-z_]+$"
     unit: regex
-    notes: "Format regex for Gameplay-namespace event IDs (internal events: phase_changed, quota_progress, banked, gopher.launched, etc.). Event Bus R5 enforces namespace distinction from Feedback."
+    notes: "Format regex for Gameplay-namespace event IDs (internal events: phase_changed, quota_progress, banked, gopher.launched, etc.). Event Bus R5 enforces namespace distinction from Feedback. Save/Load subscribes to gameplay.* channels as write triggers and proposes 7 new gameplay.* events (save-load.md OQ-4) that must be added to Event Bus's Section C Interactions table before implementation."
     added: 2026-04-20
     revised: ""
 
