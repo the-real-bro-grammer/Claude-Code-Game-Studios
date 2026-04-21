@@ -1,11 +1,13 @@
 # Data Registry
 
-> **Status**: Approved (pending independent `/design-review` in a fresh session)
-> **Author**: Robert Michael Watson + game-designer / systems-designer / unity-specialist / creative-director / qa-lead
-> **Last Updated**: 2026-04-20
+> **Status**: Revised after `/design-review` (2026-04-21) — pending re-review in a fresh session
+> **Author**: Robert Michael Watson + game-designer / systems-designer / unity-specialist / creative-director / qa-lead / economy-designer / performance-analyst
+> **Last Updated**: 2026-04-21
 > **Implements Pillar**: Foundation for all five pillars (no direct player-facing fantasy — infrastructure that enables every other system to deliver its pillar)
 >
 > **Creative Director Review (CD-GDD-ALIGN)**: CONCERNS → RESOLVED 2026-04-20 (3 fixes applied: E_norm objectivity locked in R8.a and D.2; Balance Audit window UX acceptance criteria added as AC-R8c / AC-R8d; OQ-1 hard rule captured in R8.b)
+>
+> **/design-review (2026-04-21)**: MAJOR REVISION NEEDED → RESOLVED in this revision pass. 12 blocking items addressed: (1) R4 GUID model rewritten to always-check-on-OnValidate with `#if UNITY_EDITOR` guard; (2) EC-R2 lazy-init pattern replaces non-functional `[DefaultExecutionOrder]` mitigation; (3) Edge Cases now labeled EC-A1..A7 / EC-B1..B3 / EC-R1..R3 / EC-F1..F6; (4) C_rate authority conflict resolved to "fixed tuning constant (default 0.6)"; (5) LootTable `guaranteedDrop` removed from MVP schema; (6) qty range distribution specified as uniform-integer; (7) D.2 now carries an explicit Pillar 3 scope disclaim + AC-R8e cross-loadout playtest gate at VS; (8) MVP shop schema clarified (reads ToolConfig.upgradeTierChain); (9) AC-D1 and AC-D2 fixtures now in-schema-range; (10) AC-R1 split into R1a/R1b, AC-R5 split into R5a/R5b/R5c, AC-R8c requires sign-off artifact, AC-R8d scoped to decision logic (EditMode-observable), AC-NHV rewritten with explicit allowlist; (11) AC-C1..C11 marked DEFERRED to consumer-system sprints; (12) perf ACs tightened (P1: 50ms → 5ms; P3: excludes audio data; P4 added for Layer 2 latency). Remaining open items: cross-biome Net E_norm determinism (addressed via EC-F6), CurrencyDefinition missing fields (handed to Currency & Economy GDD per Cross-References), CosmeticConfig schema-evolution procedure (to be addressed at VS when ShopProductConfig lands).
 
 ## Summary
 
@@ -39,7 +41,7 @@ Data Registry succeeds by being invisible. Its fantasy is the one the player nev
 
 **R3. Individual SO Assets + Typed Catalog Wrappers.** Each data entry is its own `.asset` file under `Assets/Data/[category]/`. One `[Category]Catalog.asset` per category aggregates all entries into a serialized list. Consumer systems hold a serialized reference to the Catalog, never to individual entries or to file paths.
 
-**R4. GUID-Based Stable IDs.** Every `DataRegistryEntry` subclass has a serialized private `_id` string populated once via `AssetDatabase.AssetPathToGUID` in `OnValidate()`. IDs survive asset renames, moves, and build. Duplicated assets must be caught at the `AssetPostprocessor` layer because the serialized `_id` copies verbatim on duplicate.
+**R4. GUID-Based Stable IDs.** Every `DataRegistryEntry` subclass has a serialized private `_id` string populated from `AssetDatabase.AssetPathToGUID` in `OnValidate()` using the **always-check model**: on every `OnValidate` invocation, the code computes the expected GUID for the asset's current path and writes it to `_id` if and only if the stored value differs. This handles asset creation, renames, and moves in one mechanism — no separate rename path required. The `AssetDatabase` call MUST be guarded with `#if UNITY_EDITOR` because `AssetDatabase` is editor-only and references would fail to compile in a player build. Duplicated assets still require a separate check — on duplication the `_id` copies verbatim to the new asset path, so the always-check will immediately rewrite it to the duplicate's own GUID; however, both assets briefly coexist with matching GUIDs, which the `AssetPostprocessor` layer (R5 Layer 2) catches as a duplicate-ID collision.
 
 **R5. Layered Editor-Time Validation.** Three layers:
 - **Layer 1 — `OnValidate()`** per SO class: catches out-of-range values, null required references, empty display names. Logs via `Debug.LogWarning(this)` — never throws.
@@ -65,7 +67,7 @@ Data Registry succeeds by being invisible. Its fantasy is the one the player nev
 | 1 | `ToolConfig` | Type, cost, effect params, upgrade tier chain | Tool System | Cost > 0; upgrade chain acyclic; all tier refs resolve |
 | 2 | `HazardConfig` | Type, spawn timing, threat params, counter-tool ref, penalty | Hazard System | Fuse duration > 0; counter-tool ref resolves; penalty ≥ 0 |
 | 3 | `GopherConfig` | Variant ID, rhythm pattern, loot table ref, anim state set | Gopher Spawn | Rhythm has ≥ 1 launch event; loot ref resolves |
-| 4 | `LootTable` | Entry list (item, weight, qty range), guaranteed-drop flags | Collection System | Weights sum to 1.0 ± 0.001; no weight ≤ 0; qty min ≤ max |
+| 4 | `LootTable` | Entry list: `(item, weight, qtyMin, qtyMax)` per entry + optional `_excludeFromQuotaSimulation` flag (see EC-F4) | Collection System | Weights are strictly positive (no sum-to-1 constraint — runtime normalizes per D.1); qty min ≤ max; qty range draws uniform-integer when the runtime rolls quantities. **No "guaranteed-drop" flag at MVP** — if Collection System needs guaranteed drops, it owns that extension (not Data Registry) |
 | 5 | `LevelData` | Biome ref, quota, time budget, hole layout, hazard density, allowed tool mask | Level Runtime | Quota > 0; time ∈ [30,120]s; **quota achievability simulation** (error if un-completable) |
 | 6 | `BiomeData` | Display name, unlock node ref, allowed hazards, max hole count, ambient audio ID, bg asset | Biome Map | Max holes ∈ [1,6]; ambient audio ID resolves; ≥ 1 hazard listed |
 | 7 | `CurrencyDefinition` | Currency ID (coin/gem), name, icon, earn-rate baseline, IAP product ID (stub at MVP) | Currency & Economy | Earn-rate > 0; icon non-null; no duplicate IDs |
@@ -76,6 +78,8 @@ Data Registry succeeds by being invisible. Its fantasy is the one the player nev
 
 **Vertical Slice additions**: `CosmeticConfig`, `ShopProductConfig`
 **Shippable v1.0 additions**: `AnalyticsEventTaxonomy`, `LocalizationStringTable`
+
+**MVP shop schema note**: the MVP shop has **no dedicated `ShopProductConfig`**. It reads directly from `ToolConfig.upgradeTierChain` (category #1) — each upgrade tier carries its own cost in coins, so the MVP shop UI iterates the chain and renders purchase buttons using the next tier's cost field. `ShopProductConfig` lands at Vertical Slice to add IAP metadata (product IDs, price-point strings, ad-reward references, cosmetic product types) that the MVP shop does not need. This is a deliberate scope decision; Shop & IAP GDD (VS priority) must explicitly acknowledge the MVP-to-VS schema migration path.
 
 ### States and Transitions
 
@@ -134,7 +138,15 @@ Raw weights are designer-authored with no sum-to-1 constraint. Runtime normalize
 
 **Validation (R5):** `OnValidate` rejects `W_i ≤ 0` or `W_total == 0`. CI test asserts both conditions across all LootTable assets. No sum-to-1 check is enforced (runtime normalizes).
 
-### D.2 EfficiencyRatio (Pillar 3 audit)
+### D.2 EfficiencyRatio (Pillar 3 within-category audit)
+
+> **Scope disclaim**: D.2 is a **within-category, per-tool dominance audit**. It flags a single tool that is disproportionately powerful relative to its category peers (e.g., one Ramp vastly outclasses other Ramps). D.2 does **NOT** validate:
+> - **Cross-category dominance** — e.g., all Ramps outclass all Nets. Categories are compared separately; there is no cross-category ratio.
+> - **Loadout-slot economics** — a 1000-coin ultra-tool vs. two 500-coin tools at equal budget. Loadout slots are owned by Tool System GDD.
+> - **Dead-weight tools (floor)** — a category where 5 of 6 tools are functionally useless passes D.2 trivially; the arithmetic mean drags toward the dead weight and the one barely-viable tool sits just above mean. A floor-ratio check is a Tool System GDD concern.
+> - **Tiered tool progression** — intentional Bronze/Silver/Gold tiers within a single category will trip D.2 automatically; the resolution is to model tiers as separate categories (each tier is its own `CategoryMean_k`), not to mass-apply `_dominanceJustified`.
+>
+> Pillar 3 ("Mastery Through Economy — multiple viable loadouts") validation is therefore **not fully covered by D.2 alone**. Cross-loadout viability is a Vertical Slice playtest responsibility (see AC-R8e). Data Registry owns the numeric per-tool audit; Pillar 3 final validation is a playtest gate.
 
 A tool's within-category value-per-coin, computed at editor time and surfaced in the balance audit window.
 
@@ -173,8 +185,8 @@ Validates that a `LevelData` quota is mathematically reachable under worst-case 
 | Hole count | H | int | [1, 6] | Number of active gopher holes in this `LevelData` (`BiomeData.maxHoles` bounds) |
 | Expected loot value per arc | EV_loot | float | [0.5, 50.0] coins | `Σ (P_i * V_i)` across referenced LootTable entries, where `V_i` is the mid-point coin value of entry i's qty range |
 | Launches per time budget | L_budget | float | [1, 60] | Worst-case launches per hole: `T_level / T_arc_max` where `T_level` ∈ [30, 120] s and `T_arc_max` is the slowest gopher arc from the referenced `GopherConfig` rhythm |
-| Collection rate | C_rate | float | [0.0, 1.0] | **Worst-case 0.6.** Corresponds to worst allowed tool loadout + slowest gopher rhythm; not a skill estimate |
-| Quota achievability ceiling | Ceiling | float | [0, ∞) | Maximum coins collectible under worst-case over the full level duration |
+| Collection rate | C_rate | float | **fixed tuning constant (default 0.6; tunable range [0.5, 0.75] via Tuning Knobs)** | Worst-case collection fraction. Not a runtime input and not a designer-editable per-level field — a single project-wide constant owned by the Tuning Knobs table. Corresponds to worst allowed tool loadout + slowest gopher rhythm; not a skill estimate |
+| Quota achievability ceiling | Ceiling | float | [0, ~10,800] at default C_rate | Maximum coins collectible under worst-case over the full level duration |
 
 **Output Range:** [0, ~10,800] coins at extreme settings (6 holes × 50 EV × 60 launches × 0.6).
 
@@ -196,43 +208,49 @@ Validates that a `LevelData` quota is mathematically reachable under worst-case 
 
 ### Authoring-Time
 
-- **If a designer duplicates an asset (Ctrl+D or git merge conflict resolved by accepting both branches)**: the new asset copies `_id` verbatim from the source. `OnValidate` on the duplicate does not re-run `AssetPathToGUID` unless explicitly triggered. `AssetPostprocessor.OnPostprocessAllAssets` catches this on the next import event and logs `Debug.LogError` naming both asset paths. Duplicate `_id` blocks the CI EditMode test. Resolution: designer deletes the duplicate or clicks "Reset ID" on the custom inspector.
+- **EC-A1 — If a designer duplicates an asset (Ctrl+D or git merge conflict resolved by accepting both branches)**: under the R4 always-check model, `OnValidate` on the duplicate immediately detects that the stored `_id` no longer matches `AssetDatabase.AssetPathToGUID(duplicatePath)` and rewrites `_id` to the duplicate's own GUID. This happens whenever the inspector opens or a save fires on the duplicate. If both assets coexist briefly with matching GUIDs before the check runs, `AssetPostprocessor.OnPostprocessAllAssets` catches the collision on the next import event and logs `Debug.LogError` naming both asset paths. Duplicate `_id` blocks the CI EditMode test.
 
-- **If a `LevelData` is authored before its referenced `BiomeData` exists**: `OnValidate` evaluates biome ref as null, logs a WARNING, and reports the quota achievability simulation as SKIPPED (not ERROR). The CI EditMode test treats SKIPPED as an ERROR to block merges. The WARNING state exists only to allow mid-session authoring without blocking the editor.
+- **EC-A2 — Asset rename preserves `_id` semantics via GUID update**: when a designer renames an SO asset in the Editor, Unity fires `OnValidate` on the renamed asset. The R4 always-check detects the new `AssetDatabase.AssetPathToGUID(newPath)` and writes it to `_id`. Consumers holding the asset by serialized reference continue to resolve correctly (Unity serializes by GUID, not path). Consumers holding the OLD `_id` as a string constant will break — but this is already disallowed by R3 + Event Bus R3 codegen policy (no hand-written ID strings).
 
-- **If a designer sets `_dominanceJustified = true` on every tool in a category**: D.2 still includes all tools in `CategoryMean_k`. CI passes (no unflagged dominators). The balance audit window renders an `[ALL JUSTIFIED]` banner requiring lead review. Not automatically blocked — consistent with `_dominanceJustified` as a designer escape valve.
+- **EC-A3 — If a `LevelData` is authored before its referenced `BiomeData` exists**: `OnValidate` evaluates biome ref as null, logs a WARNING, and reports the quota achievability simulation as SKIPPED (not ERROR). The CI EditMode test treats SKIPPED as an ERROR to block merges. The WARNING state exists only to allow mid-session authoring without blocking the editor.
 
-- **If a `StarThresholdConfig` references a `LevelData` that was removed from the catalog**: Unity serializes the reference as a missing-object sentinel (not null, but compares to null as `false`). `OnValidate` logs an error. CI build step iterating all `StarThresholdConfig` assets catches it as null-equivalent. Resolution: designer re-assigns or deletes the orphan.
+- **EC-A4 — If a designer sets `_dominanceJustified = true` on every tool in a category**: D.2 still includes all tools in `CategoryMean_k`. Per R8.b, if > 30% of the category is justified the Balance Audit window fires a blocking modal requiring lead sign-off before the window can close. The `[ALL JUSTIFIED]` case is a superset of that trigger.
 
-- **If an event ID passes the taxonomy regex but has no `AudioClip` assigned**: format validation passes. Non-null clip enforcement fires only for non-ambient tiers. Designer assigning a valid-format key with a null clip at a `vfx.collect.*` tier passes `OnValidate` silently; the CI EditMode test asserts non-null clips for all `vfx.collect.*` + `vfx.hazard.*` entries, blocking the merge.
+- **EC-A5 — If a `StarThresholdConfig` references a `LevelData` that was removed from the catalog**: Unity serializes the reference as a missing-object sentinel (not null, but compares to null as `false`). `OnValidate` logs an error. CI build step iterating all `StarThresholdConfig` assets catches it as null-equivalent. Resolution: designer re-assigns or deletes the orphan.
 
-- **If a `LootTable` has a single entry with `W_i = 0.0001`**: `OnValidate` only rejects `W_i ≤ 0`; epsilon weights are accepted. At runtime `P_i = 1.0` (single entry normalizes regardless of weight). For multi-entry tables with one epsilon weight, the entry is practically dead. Mitigation: CI test adds an advisory (not error) if `W_i < 0.01` for any entry in a multi-entry table.
+- **EC-A6 — If an event ID passes the taxonomy regex but has no `AudioClip` assigned**: format validation passes. Non-null clip enforcement fires only for non-ambient tiers. Designer assigning a valid-format key with a null clip at a `vfx.collect.*` tier passes `OnValidate` silently; the CI EditMode test asserts non-null clips for all `vfx.collect.*` + `vfx.hazard.*` entries, blocking the merge.
+
+- **EC-A7 — If a `LootTable` has a single entry with `W_i = 0.0001`**: `OnValidate` only rejects `W_i ≤ 0`; epsilon weights are accepted. At runtime `P_i = 1.0` (single entry normalizes regardless of weight). For multi-entry tables with one epsilon weight, the entry is practically dead. Mitigation: CI test adds an advisory (not error) if `W_i < 0.01` for any entry in a multi-entry table.
 
 ### Build-Time
 
-- **If a scene holds a direct serialized reference to a `ToolConfig` that is deleted before build**: Unity serializes this as a missing-object reference, not null. Build does not fail automatically. The CI build step must include an explicit `AssetDatabase` sweep for missing-object references in all scenes in build settings. This sweep is a BLOCKING CI gate.
+- **EC-B1 — If a scene holds a direct serialized reference to a `ToolConfig` that is deleted before build**: Unity serializes this as a missing-object reference, not null. Build does not fail automatically. The CI build step must include an explicit `AssetDatabase` sweep for missing-object references in all scenes in build settings. This sweep is a BLOCKING CI gate.
 
-- **If a GUID is manually hex-edited in a `.meta` file (manual conflict resolution)**: `AssetDatabase.AssetPathToGUID` returns the new GUID; the `_id` field stored in the `.asset` file still holds the old GUID. `Catalog.GetById(old_id)` returns null at runtime for any consumer holding the old ID as a string constant. CI EditMode test cross-checks every asset's `_id` against `AssetPathToGUID` for that asset path, logging error on mismatch. Resolution: "Reset ID" button re-runs population.
+- **EC-B2 — If a GUID is manually hex-edited in a `.meta` file (manual conflict resolution)**: `AssetDatabase.AssetPathToGUID` returns the new GUID; the `_id` field stored in the `.asset` file still holds the old GUID. Under the R4 always-check model the next `OnValidate` invocation rewrites `_id` to match. Until that occurs, `Catalog.GetById(old_id)` returns null at runtime for any consumer holding the old ID as a string constant (which should not exist per R3). CI EditMode test cross-checks every asset's `_id` against `AssetPathToGUID` for that asset path, logging error on mismatch — this catches the gap between edit and next `OnValidate`.
 
-- **If two catalogs of the same category exist (e.g., two `ToolCatalog.asset` files)**: R3 requires one per category, but Unity does not enforce singleton catalog assets. A consumer referencing the wrong catalog silently operates on a subset. CI build step asserts `AssetDatabase.FindAssets("t:ToolCatalog")` returns exactly one result per category type. ERROR gate.
+- **EC-B3 — If two catalogs of the same category exist (e.g., two `ToolCatalog.asset` files)**: R3 requires one per category, but Unity does not enforce singleton catalog assets. A consumer referencing the wrong catalog silently operates on a subset. CI build step asserts `AssetDatabase.FindAssets("t:ToolCatalog")` returns exactly one result per category type. ERROR gate.
 
 ### Runtime
 
-- **If consumer code attempts mutation of an SO field via reflection at runtime (bypassing get-only accessors)**: Unity does not prevent this. Field write succeeds; corrupts shared in-memory SO state for all consumers for the rest of the session. Mitigation: CI static-analysis rule greps for `SetValue` or `FieldInfo.SetValue` on `DataRegistryEntry` subtypes outside test assemblies, failing the build if found.
+- **EC-R1 — If consumer code attempts mutation of an SO field via reflection at runtime (bypassing get-only accessors)**: Unity does not prevent this. Field write succeeds; corrupts shared in-memory SO state for all consumers for the rest of the session. Mitigation: CI static-analysis rule greps for `SetValue` or `FieldInfo.SetValue` on `DataRegistryEntry` subtypes outside test assemblies, failing the build if found.
 
-- **If `Catalog.GetById(id)` is called before `OnEnable` completes (race during domain reload)**: the internal `Dictionary` is not yet built; `GetById` returns null. Consumers must check null on every `GetById` call and treat null as a configuration error, not a gameplay state. Systems calling `GetById` in `Awake` must use `[DefaultExecutionOrder]` on the catalog or delay to `Start`.
+- **EC-R2 — If `Catalog.GetById(id)` is called before `OnEnable` completes (race during domain reload)**: the internal `Dictionary` is not yet built; `GetById` returns null. Mitigation: `Catalog` uses **lazy initialization** — the `Dictionary` is built on the first `GetById` or `All` call if `OnEnable` has not already populated it, guarded by a null-check on the dictionary field. This eliminates the race entirely without requiring execution-order control. Note: `[DefaultExecutionOrder]` is a MonoBehaviour attribute and does NOT apply to ScriptableObjects; the lazy-init pattern is the only viable race mitigation for SO-based catalogs. Consumers should still cache resolved SO references at `Awake`/`Start` rather than calling `GetById` per frame (see hot-path rule in Tuning Knobs).
 
-- **If `AudioEventTaxonomy.GetClip(id)` is called with a valid-format key that has no entry in the taxonomy**: returns null. Audio Bus's null-clip path must play silence and log `Debug.LogWarning(id)`, never throw. Preserves audio-less gameplay instead of crashing; warning surfaces the unregistered ID to the designer.
+- **EC-R3 — If `AudioEventTaxonomy.GetClip(id)` is called with a valid-format key that has no entry in the taxonomy**: returns null. Audio Bus's null-clip path must play silence and log `Debug.LogWarning(id)`, never throw. Preserves audio-less gameplay instead of crashing; warning surfaces the unregistered ID to the designer.
 
 ### Formula Boundaries
 
-- **If `QuotaAchievabilityCeiling` exactly equals `Quota` (ratio = 100%)**: falls in the WARNING band, not PASS. Because `Ceiling >= Quota / 0.95` requires `Ceiling >= Quota * 1.053`, exact equality fails the PASS condition but passes the non-error condition. Author must reduce quota by at least 1 coin or raise one of `H`, `EV_loot`, `T_level` to achieve 5% margin. Intentional: 100% of worst-case ceiling is unreachable for any player below perfect.
+- **EC-F1 — If `QuotaAchievabilityCeiling` exactly equals `Quota` (ratio = 100%)**: falls in the WARNING band, not PASS. Because `Ceiling >= Quota / 0.95` requires `Ceiling >= Quota * 1.053`, exact equality fails the PASS condition but passes the non-error condition. Author must reduce quota by at least 1 coin or raise one of `H`, `EV_loot`, `T_level` to achieve 5% margin. Intentional: 100% of worst-case ceiling is unreachable for any player below perfect.
 
-- **If an `EfficiencyRatio` category contains exactly one tool (N_k = 1)**: `CategoryMean_k` equals that tool's own ratio. The threshold is `2.0 * own_ratio`. The tool trivially passes. Balance audit window renders `[SINGLE ENTRY — DOMINANCE CHECK SKIPPED]` label instead of a misleading green result.
+- **EC-F2 — If an `EfficiencyRatio` category contains exactly one tool (N_k = 1)**: `CategoryMean_k` equals that tool's own ratio. The threshold is `2.0 * own_ratio`. The tool trivially passes. Balance audit window renders `[SINGLE ENTRY — DOMINANCE CHECK SKIPPED]` label instead of a misleading green result.
 
-- **If all `LootTable` weights are equal (e.g., all `W_i = 1.0`)**: `P_i = 1/N` for all entries. Uniform distribution. This is a valid designer intent; `OnValidate` renders a uniform-distribution preview. Documented here because "why does my 10/10/10 table give equal odds?" is a common designer question.
+- **EC-F3 — If all `LootTable` weights are equal (e.g., all `W_i = 1.0`)**: `P_i = 1/N` for all entries. Uniform distribution. This is a valid designer intent; `OnValidate` renders a uniform-distribution preview. Documented here because "why does my 10/10/10 table give equal odds?" is a common designer question.
 
-- **If `EV_loot = 0` because a LootTable has only zero-value entries (e.g., a decoy gopher's pure-nothing table)**: `Ceiling = 0` regardless of other inputs → ERROR per D.3. But a pure-nothing gopher is a valid design intent. Resolution: designer sets `_excludeFromQuotaSimulation = true` on the LootTable; `QuotaAchievabilityCeiling` treats missing EV contribution as a conscious opt-out, not a misconfiguration.
+- **EC-F4 — If `EV_loot = 0` because a LootTable has only zero-value entries (e.g., a decoy gopher's pure-nothing table)**: `Ceiling = 0` regardless of other inputs → ERROR per D.3. But a pure-nothing gopher is a valid design intent. Resolution: designer sets `_excludeFromQuotaSimulation = true` on the LootTable; `QuotaAchievabilityCeiling` treats missing EV contribution as a conscious opt-out, not a misconfiguration.
+
+- **EC-F5 — Minimum-parameter achievability trap**: at minimum valid inputs (H=1, EV_loot=0.5, T_level=30s, T_arc_max=10s → L_budget=3), `Ceiling = 1 × 0.5 × 3 × 0.6 = 0.9 coins`. Any `Quota >= 1` (the minimum valid quota) produces `Quota / Ceiling > 1.0` → ERROR. Authors must either (a) raise `H`, (b) use a LootTable with `EV_loot >= ~2`, (c) shorten `T_arc_max` via a faster gopher rhythm, or (d) extend `T_level`. Validation error message must name which lever to adjust. Documented so the ERROR is not mystifying at minimum-legal inputs.
+
+- **EC-F6 — Net `E_norm` cross-biome context**: a Net `ToolConfig` referenced by multiple biomes is audited against the **maximum `BiomeData.maxHoles` value across all biomes that reference the tool**. This makes `E_norm` deterministic regardless of which biome the audit is triggered from, at the cost of under-counting effective `E_norm` in lower-hole biomes. Audit conservatism: a tool that looks efficient in a 3-hole biome is flagged as such based on its 6-hole denominator — the stricter bound wins.
 
 ## Dependencies
 
@@ -293,6 +311,7 @@ Data Registry's own tuning knobs are validation thresholds. Gameplay balance val
 | Parameter | Current Value | Safe Range | Effect of Increase | Effect of Decrease |
 |---|---|---|---|---|
 | `EfficiencyRatio` dominance multiplier (D.2) | 2.0× category mean | [1.5×, 3.0×] | More permissive — fewer tools flagged as dominant; risk: real outliers slip through audit | Stricter — more tools flagged; risk: false positives cause designer churn on legitimate tier variations |
+| Category-wide justification blocking-modal threshold (R8.b) | 0.30 (30% of tools in a category flagged as justified) | [0.20, 0.50] | Fewer categories trigger the blocking modal — more designer autonomy, weaker lead enforcement; **rationale for 0.30**: a category where 1 in 3 tools requires written justification is likely miscalibrated rather than intentionally varied — modal fires as a "step back and re-design" prompt rather than a per-asset correction | Tighter enforcement — modal fires on 1-in-5 or 1-in-4 justified tools; higher review load on the lead designer but tighter Pillar 3 discipline. **Interaction**: tightening this knob without loosening the dominance multiplier (D.2) creates double-binding pressure; adjust together |
 | `QuotaAchievabilityCeiling` WARNING band ratio (D.3) | 0.95 (95% of ceiling) | [0.90, 0.99] | More permissive WARNING band — fewer levels flagged brutal; allows tighter authored quotas | Stricter — more levels flagged brutal; better player experience on difficulty curves |
 | `QuotaAchievabilityCeiling` worst-case `C_rate` (D.3) | 0.6 | [0.5, 0.75] | More optimistic ceiling estimate — allows tighter authored quotas; risk: un-completable levels ship | More pessimistic — more quotas rejected as ERROR; safer for new designers but frustrating for experienced tuners |
 | LootTable min-weight advisory threshold | 0.01 | [0.001, 0.05] | Looser — fewer epsilon-weight advisories | Stricter — more entries flagged as dead; helps catch designer typos |
@@ -339,11 +358,12 @@ Editor tooling is implemented alongside the Data Registry code and is scoped in 
 
 ## Acceptance Criteria
 
-31 criteria across 6 categories. Gate classifications: **BLOCKING CI** (must pass for merge) / **ADVISORY** (logged, non-blocking) / **PLAYMODE** (requires Unity PlayMode test runner) / **MANUAL** (designer-visible check).
+After revision: 36 criteria across 6 categories. Gate classifications: **BLOCKING CI** (must pass for merge) / **ADVISORY** (logged, non-blocking) / **PLAYMODE** (requires Unity PlayMode test runner) / **MANUAL** (designer-visible check or playtest artifact). Consumer integration ACs (C1-C11) are DEFERRED per-system and are not gates on the Data Registry sprint itself.
 
 ### H.1 Rule Compliance
 
-- **AC-R1 — Runtime Immutability** — GIVEN a ScriptableObject asset is loaded into a running game session, WHEN any game system attempts to set a field on that SO at runtime, THEN the operation must either fail to compile (readonly field enforcement) or be caught by a CI static-analysis grep for assignment patterns on SO types, with zero violations permitted. **BLOCKING CI**
+- **AC-R1a — Compile-Time Immutability (structural)** — GIVEN any `DataRegistryEntry` subclass, WHEN the C# compiler processes the file, THEN all exposed data fields are declared `private [SerializeField]` with public get-only properties; no public setter exists on any subclass member. CI build produces zero warnings on this pattern and any violation fails compilation. **BLOCKING CI**
+- **AC-R1b — Runtime Immutability (grep)** — GIVEN the full `src/` directory, WHEN a CI static-analysis grep scans for direct assignment patterns on `DataRegistryEntry` subtypes (e.g., `\.<fieldName>\s*=` on receiver types inheriting `DataRegistryEntry`), THEN zero matches outside test assemblies. Any match is a blocking CI failure. **BLOCKING CI**
 
 - **AC-R2 — No `Resources.Load`** — GIVEN the full game codebase, WHEN a CI grep job scans for `Resources.Load`, THEN zero matches appear in any file under `src/` or `tests/`. **BLOCKING CI**
 
@@ -351,7 +371,9 @@ Editor tooling is implemented alongside the Data Registry code and is scoped in 
 
 - **AC-R4 — GUID Stability** — GIVEN any SO asset in the registry, WHEN inspected in the Editor or via EditMode test, THEN its `_id` field equals `AssetDatabase.AssetPathToGUID(assetPath)`. **BLOCKING CI**
 
-- **AC-R5 — Three-Layer Validation Present** — GIVEN the Data Registry implementation, WHEN a CI job runs, THEN all three validation layers execute (OnValidate on SO save, AssetPostprocessor on import, EditMode CI tests). All three must report zero errors for merge. **BLOCKING CI**
+- **AC-R5a — Layer 3 CI EditMode Suite** — GIVEN the Data Registry EditMode test suite in `tests/editmode/data-registry/`, WHEN CI runs `Unity.exe -batchmode -runTests -testPlatform EditMode`, THEN the suite reports zero failures. **BLOCKING CI**
+- **AC-R5b — Layer 2 AssetPostprocessor Coverage** — GIVEN an EditMode test that manually invokes `OnPostprocessAllAssets` with a fixture asset set containing (a) a duplicate-ID pair and (b) a broken cross-catalog reference, WHEN the test runs, THEN both validation warnings/errors fire and are captured by the test's log-listener; zero expected log entries means test failure. **BLOCKING CI**
+- **AC-R5c — Layer 1 OnValidate Coverage** — GIVEN a dedicated EditMode test that instantiates a `DataRegistryEntry` subclass via `ScriptableObject.CreateInstance`, sets a field to an out-of-range value, then calls `OnValidate()` directly, WHEN the test asserts, THEN the expected `Debug.LogWarning` (per R5 Layer 1 "never throws") is captured by the log-listener. One test per `DataRegistryEntry` subclass. **BLOCKING CI**
 
 - **AC-R6 — Atlas Discipline Warning** — GIVEN any SO with a Sprite or Prefab field, WHEN the AssetPostprocessor runs on import, THEN SOs referencing sprites not in any `SpriteAtlas` emit a console warning labeled `[DataRegistry] Atlas discipline:`. Logged but non-blocking at MVP. **ADVISORY**
 
@@ -363,15 +385,17 @@ Editor tooling is implemented alongside the Data Registry code and is scoped in 
 
 - **AC-R8b — `_dominanceJustified` Requires Justification Note** — GIVEN a ToolConfig with `_dominanceJustified = true`, WHEN `OnValidate` runs, THEN the asset's `_justificationNote` string must be non-empty and ≥ 30 characters; empty or too-short notes cause OnValidate error. CI EditMode test covers both boundary (29 chars = fail, 30 chars = pass). **BLOCKING CI**
 
-- **AC-R8c — Balance Audit Window UX** — GIVEN the Balance Audit window is opened in Unity Editor, WHEN the lead designer inspects it, THEN it must (1) be sortable by ratio descending, (2) render flagged rows in a visually distinct manner (e.g., red row background or warning icon), (3) support one-click jump from audit row to the offending asset in the Project view, (4) expose a CSV export menu command. If any of these four capabilities is missing, the window fails its Pillar 3 enforcement purpose. **MANUAL** (lead designer sign-off at end of Data Registry implementation sprint)
+- **AC-R8c — Balance Audit Window UX** — GIVEN the Balance Audit window is opened in Unity Editor, WHEN the lead designer inspects it, THEN it must (1) be sortable by ratio descending, (2) render flagged rows in a visually distinct manner (e.g., red row background or warning icon), (3) support one-click jump from audit row to the offending asset in the Project view, (4) expose a CSV export menu command. Verification: lead designer writes a dated sign-off entry to `production/qa/evidence/balance-audit-window-signoff-[YYYY-MM-DD].md` confirming all four capabilities work. The Data Registry implementation sprint cannot be marked Done in the sprint board until this file exists with a date inside the sprint boundary. **MANUAL** (sign-off artifact gated at sprint close)
 
-- **AC-R8d — Category-Wide Justification Modal** — GIVEN a tool category where > 30% of tools have `_dominanceJustified = true`, WHEN the Balance Audit window is opened, THEN it renders a blocking modal (not a dismissible banner) that prevents closing the window until a lead designer sign-off is recorded via a lead-designer-only editor pref. CI EditMode test asserts the modal fires on the 31% boundary with a synthetic category. **BLOCKING CI** (test firing) + **MANUAL** (sign-off mechanism)
+- **AC-R8d — Category-Wide Justification Modal (decision logic)** — GIVEN a synthetic `ToolCategory` fixture where 31% of tools have `_dominanceJustified = true` (e.g., 4 of 13), WHEN the method `BalanceAuditWindow.ShouldShowJustificationModal(category)` is called, THEN it returns `true`. A fixture at 30.7% (4 of 13 is 30.77%) returns `true`; a fixture at exactly 30.0% (3 of 10) returns `false`; a fixture with zero justified tools returns `false`. EditMode parameterised unit test covers the 30% boundary. Note: this AC covers the **decision logic only**; the modal's GUI rendering and sign-off mechanism are covered by AC-R8c (MANUAL). An EditMode test cannot observe an EditorWindow modal headlessly. **BLOCKING CI**
+
+- **AC-R8e — Cross-Loadout Viability Playtest (Pillar 3 VS gate)** — GIVEN the VS playtest build with at least two complete tool loadouts defined in `production/playtests/loadout-fixtures/`, WHEN a playtest run exercises each loadout across ≥ 3 representative MVP levels, THEN each loadout completes (1-star or better) at least 60% of the levels attempted. The raw pass rates and qualitative observations are recorded in `production/qa/evidence/pillar3-viability-[YYYY-MM-DD].md`. This is the Pillar 3 validation gate that D.2's within-category audit cannot cover (see D.2 Scope Disclaim). Failure (i.e., one loadout wins > 80% of the time) triggers a Tool System rebalance sprint before VS sign-off. **MANUAL** (playtest artifact gated at VS gate)
 
 ### H.2 Formula Correctness
 
-- **AC-D1 — NormalizedProbability** — GIVEN a LootTable with weights `[1, 3, 6]`, WHEN `NormalizedProbability` is computed, THEN results are `[0.1, 0.3, 0.6]` (sum = 1.0, ±0.0001). A second case with weights `[0, 0, 1]` yields `[0, 0, 1]`. EditMode unit test. **BLOCKING CI**
+- **AC-D1 — NormalizedProbability** — GIVEN a LootTable with weights `[1, 3, 6]`, WHEN `NormalizedProbability` is computed, THEN results are `[0.1, 0.3, 0.6]` (sum = 1.0, ±0.0001). A second case with weights `[0.01, 99.99, 0.01]` (all strictly positive per R5) yields approximately `[0.0001, 0.9998, 0.0001]` (sum = 1.0, ±0.0001). A third case with a single entry `[1]` yields `[1.0]` exactly. EditMode unit test. Note: `W_i = 0` is rejected at R5 `OnValidate` before ever reaching the runtime formula — no test fixture uses zero weights. **BLOCKING CI**
 
-- **AC-D2 — EfficiencyRatio Dominance Boundary** — GIVEN a ToolConfig with `E_norm = 1.0, C_base = 0.5` (ratio = 2.0) and category mean = 1.0, WHEN audit runs, THEN the asset is flagged. A second case at 1.99× mean must NOT be flagged. EditMode unit test covers both boundary values. **BLOCKING CI**
+- **AC-D2 — EfficiencyRatio Dominance Boundary** — GIVEN a ToolConfig with `E_norm = 0.5, C_base = 5` (ratio = 0.1, within schema range `C_base ∈ [1, 999]`) in a synthetic category whose mean is 0.05, WHEN audit runs, THEN ratio = 2.0× mean triggers the dominance flag. A second case with `E_norm = 0.495, C_base = 5` (ratio ≈ 0.099, approximately 1.98× mean) must NOT be flagged. A third case with `_dominanceJustified = true` and a 30-char justification note and the first fixture's inputs must NOT be flagged. EditMode parameterised unit test covers all three fixtures, all with in-schema-range inputs. **BLOCKING CI**
 
 - **AC-D3 — QuotaAchievabilityCeiling Band Boundaries** — GIVEN Ceiling = 0.94× Quota, THEN ERROR. GIVEN Ceiling = 0.97× Quota, THEN WARNING. GIVEN Ceiling = 1.01× Quota, THEN PASS. GIVEN Ceiling = 1.00× Quota exactly, THEN WARNING (not PASS, per EC-F1). All four covered by a single parameterized EditMode unit test. **BLOCKING CI**
 
@@ -389,48 +413,54 @@ Editor tooling is implemented alongside the Data Registry code and is scoped in 
 
 ### H.4 Performance
 
-- **AC-P1 — Catalog Dictionary Build Time** — GIVEN any single-category Catalog with up to 500 SO assets, WHEN the `Dictionary<string,T>` is built at Editor load or domain reload, THEN build time ≤ 50ms (measured via `System.Diagnostics.Stopwatch` in EditMode perf test). **ADVISORY**
+- **AC-P1 — Catalog Dictionary Build Time (MVP scale)** — GIVEN any single-category Catalog with the MVP expected entry count (per category: Tools ≤ 20, Hazards ≤ 10, Loot ≤ 50, Levels ≤ 25, Biomes ≤ 3, others ≤ 30), WHEN the `Dictionary<string,T>` is built at Editor load or domain reload (test must explicitly trigger `ScriptableObject.CreateInstance` + `OnEnable` to ensure the build executes), THEN build time ≤ 5ms per Catalog (measured via `System.Diagnostics.Stopwatch` in EditMode perf test). Note: the Dictionary is constructed with `new Dictionary<string, T>(entries.Count)` to pre-size capacity and avoid resize allocations. **ADVISORY**
 
-- **AC-P2 — Catalog Load Time at Scene Entry** — GIVEN all 11 Catalogs pre-warmed, WHEN a scene is entered in PlayMode and all Catalogs are accessed for the first time in that session, THEN total time from scene load to all Catalog lookups returning valid results ≤ 100ms on minimum-spec Mali-G52 Android hardware. **PLAYMODE**
+- **AC-P2 — Catalog Load Time at Scene Entry** — GIVEN all 11 Catalogs referenced by the scene's `DataRegistryBootstrapper` MonoBehaviour, WHEN the scene is entered in PlayMode on developer hardware (or the lowest-tier Android device available), THEN total time from scene load to all Catalog first-access `GetById` returning valid results ≤ 50ms. If Mali-G52-class hardware is available, verify ≤ 100ms on-device; if not available, defer Mali-G52 verification to the first hardware-access playtest session and document in `production/qa/evidence/`. **ADVISORY** (reclassified from PLAYMODE — hardware-dependent measurement)
 
-- **AC-P3 — Memory Footprint** — GIVEN all 11 Catalogs loaded with MVP asset sets, WHEN a Unity Memory Profiler snapshot is taken immediately after Catalog initialization, THEN combined heap allocation attributable to Data Registry ≤ 32MB. **ADVISORY**
+- **AC-P3 — Memory Footprint (excluding audio data)** — GIVEN all 11 Catalogs loaded with MVP asset sets, WHEN a Unity Memory Profiler snapshot is taken immediately after Catalog initialization, THEN combined heap allocation attributable to Data Registry schema + Dictionary structures (excluding AudioClip PCM buffers loaded via `AudioEventTaxonomy` references) ≤ 4MB. AudioClip memory is a consumer-side cost governed by clip Load Type settings and is audited separately in Audio Bus GDD, not here. OQ-5's Addressables migration trigger is re-scoped to "Data Registry schema heap > 4MB OR total AudioClip preload pressure > 28MB," not the combined 32MB used prior. **ADVISORY**
 
-### H.5 Consumer Integration (PLAYMODE per system)
+- **AC-P4 — AssetPostprocessor (Layer 2) Latency** — GIVEN the v1.0-scale asset set (100+ levels, 50+ tools, all catalog categories populated), WHEN a single asset save triggers `OnPostprocessAllAssets`, THEN Layer 2 validation (duplicate-ID check, cross-catalog reference check, atlas discipline warning) completes ≤ 200ms on developer hardware. This protects designer iteration velocity — violations block `save → iterate` workflow. If the budget is breached, the designer authoring UX degrades and Addressables migration may be needed earlier than OQ-5 assumes. **ADVISORY**
 
-- **AC-C1 — Level Runtime** — GIVEN a LevelData SO with defined quota, biome, and tool references, WHEN Level Runtime requests level config at scene load, THEN it receives a populated `LevelData` instance with all fields non-null and non-default; no `Resources.Load` in the call stack. **PLAYMODE**
+### H.5 Consumer Integration (PLAYMODE per system — DEFERRED per-system)
 
-- **AC-C2 — Tool System** — GIVEN a ToolConfig SO with EfficiencyRatio and Sprite reference, WHEN the Tool System requests config by GUID, THEN Catalog lookup returns the correct `ToolConfig` within a single dictionary access; Sprite ref is non-null. **PLAYMODE**
+> **Scope note**: Each AC-C* criterion below is **gated by the delivery of its consumer system's GDD and implementation**. They CANNOT be authored or executed during the Data Registry implementation sprint — the referenced consumer systems (Level Runtime, Tool System, Collection System, Hazard System, Critter AI, Currency, Progression, Biome Map, HUD, Audio Bus) are all still pending design. Each AC-C* is scheduled for verification during the respective consumer system's own implementation sprint, using the Data Registry test fixture (pre-populated Catalog assets) scaffolded during this sprint as the shared substrate. The **Data Registry sprint** is NOT gated on AC-C* passing; it is gated on AC-R*, AC-D*, AC-EC-*, and AC-P* only.
 
-- **AC-C3 — Hazard System** — GIVEN a HazardConfig SO with defined damage and trigger params, WHEN the Hazard System requests config by GUID, THEN returned `HazardConfig` matches authored values; lookup completes without warnings. **PLAYMODE**
+- **AC-C1 — Level Runtime** — GIVEN a LevelData SO with defined quota, biome, and tool references, WHEN Level Runtime requests level config at scene load, THEN it receives a populated `LevelData` instance with all fields non-null and non-default; no `Resources.Load` in the call stack. **PLAYMODE (DEFERRED to Level Runtime sprint)**
 
-- **AC-C4 — Critter AI (via Tool/Hazard)** — GIVEN GopherConfig and HazardConfig SOs referenced by the same LevelData, WHEN Critter AI initializes its behavior tree, THEN it reads tool-avoidance weights from ToolConfig and hazard-response thresholds from HazardConfig via Catalog lookups; no null-reference exceptions. **PLAYMODE**
+- **AC-C2 — Tool System** — GIVEN a ToolConfig SO with EfficiencyRatio and Sprite reference, WHEN the Tool System requests config by GUID, THEN Catalog lookup returns the correct `ToolConfig` within a single dictionary access; Sprite ref is non-null. **PLAYMODE (DEFERRED to Tool System sprint)**
 
-- **AC-C5 — Gopher Spawn System** — GIVEN a GopherConfig SO with spawn weight and max-count fields, WHEN the spawn system initializes for a level, THEN it reads `GopherConfig` from the Catalog; spawned gopher count respects `maxCount`. **PLAYMODE**
+- **AC-C3 — Hazard System** — GIVEN a HazardConfig SO with defined damage and trigger params, WHEN the Hazard System requests config by GUID, THEN returned `HazardConfig` matches authored values; lookup completes without warnings. **PLAYMODE (DEFERRED to Hazard System sprint)**
 
-- **AC-C6 — Collection System** — GIVEN a LootTable SO with ≥ 3 entries, WHEN Collection System requests loot resolution, THEN it receives a normalized probability distribution (sum = 1.0) from `NormalizedProbability` and selects exactly one entry without error. **PLAYMODE**
+- **AC-C4 — Critter AI (via Tool/Hazard)** — GIVEN GopherConfig and HazardConfig SOs referenced by the same LevelData, WHEN Critter AI initializes its behavior tree, THEN it reads tool-avoidance weights from ToolConfig and hazard-response thresholds from HazardConfig via Catalog lookups; no null-reference exceptions. **PLAYMODE (DEFERRED to Critter AI sprint)**
 
-- **AC-C7 — Currency & Economy** — GIVEN a CurrencyDefinition SO with exchange rate and display icon, WHEN Economy requests currency metadata by GUID, THEN it receives the correct definition; icon Sprite ref is non-null. **PLAYMODE**
+- **AC-C5 — Gopher Spawn System** — GIVEN a GopherConfig SO with spawn weight and max-count fields, WHEN the spawn system initializes for a level, THEN it reads `GopherConfig` from the Catalog; spawned gopher count respects `maxCount`. **PLAYMODE (DEFERRED to Gopher Spawn sprint)**
 
-- **AC-C8 — Progression System** — GIVEN a ProgressionNode SO with prerequisite and unlock conditions, WHEN Progression evaluates unlock eligibility, THEN it reads all referenced ProgressionNode SOs from the Catalog with no missing-ref errors; correctly evaluates at least one PASS and one FAIL in an integration test fixture. **PLAYMODE**
+- **AC-C6 — Collection System** — GIVEN a LootTable SO with ≥ 3 entries, WHEN Collection System requests loot resolution, THEN it receives a normalized probability distribution (sum = 1.0) from `NormalizedProbability` and selects exactly one entry without error. **PLAYMODE (DEFERRED to Collection System sprint)**
 
-- **AC-C9 — Biome Map** — GIVEN a BiomeData SO with terrain, hazard, and audio-zone references, WHEN Biome Map initializes a level region, THEN it reads `BiomeData` from the Catalog; all nested reference fields resolve to non-null assets. **PLAYMODE**
+- **AC-C7 — Currency & Economy** — GIVEN a CurrencyDefinition SO with exchange rate and display icon, WHEN Economy requests currency metadata by GUID, THEN it receives the correct definition; icon Sprite ref is non-null. **PLAYMODE (DEFERRED to Currency & Economy sprint)**
 
-- **AC-C10 — HUD** — GIVEN StarThresholdConfig and CurrencyDefinition SOs relevant to the current level, WHEN the HUD initializes its score display and currency counter, THEN it reads both configs from their Catalogs within a single scene-load frame and displays authored threshold values without fallback defaults. **PLAYMODE**
+- **AC-C8 — Progression System** — GIVEN a ProgressionNode SO with prerequisite and unlock conditions, WHEN Progression evaluates unlock eligibility, THEN it reads all referenced ProgressionNode SOs from the Catalog with no missing-ref errors; correctly evaluates at least one PASS and one FAIL in an integration test fixture. **PLAYMODE (DEFERRED to Progression sprint)**
 
-- **AC-C11 — Audio Bus** — GIVEN an AudioEventTaxonomy SO with at least one valid event key, WHEN the Audio Bus requests the event config by key string, THEN the event config is returned within one dictionary access; the key passes regex validation at lookup time. **PLAYMODE**
+- **AC-C9 — Biome Map** — GIVEN a BiomeData SO with terrain, hazard, and audio-zone references, WHEN Biome Map initializes a level region, THEN it reads `BiomeData` from the Catalog; all nested reference fields resolve to non-null assets. **PLAYMODE (DEFERRED to Biome Map sprint)**
+
+- **AC-C10 — HUD** — GIVEN StarThresholdConfig and CurrencyDefinition SOs relevant to the current level, WHEN the HUD initializes its score display and currency counter, THEN it reads both configs from their Catalogs within a single scene-load frame and displays authored threshold values without fallback defaults. **PLAYMODE (DEFERRED to HUD sprint)**
+
+- **AC-C11 — Audio Bus** — GIVEN an AudioEventTaxonomy SO with at least one valid event key, WHEN the Audio Bus requests the event config by key string, THEN the event config is returned within one dictionary access; the key passes regex validation at lookup time. **PLAYMODE (DEFERRED to Audio Bus sprint)**
 
 ### H.6 No Hardcoded Values
 
-- **AC-NHV — Zero Hardcoded Gameplay Values in Source** — GIVEN the full `src/` directory, WHEN a CI grep job scans for numeric literals and string constants matching known gameplay value patterns (damage values, probability weights, currency rates, quota numbers, star thresholds), THEN zero matches appear outside Data Registry SO assets and their schema definitions. Blocking failure produces a list of offending file paths and line numbers. **BLOCKING CI**
+- **AC-NHV — No Hardcoded Gameplay Constants in Source** — GIVEN the full `src/` directory, WHEN a CI grep job scans for named-constant assignments whose identifier matches the allowlist maintained at `tools/ci/nhv-allowlist.txt` (candidates: `_baseDamage`, `_dropWeight*`, `_currencyRate*`, `_quota*`, `_starThreshold*`, `_cooldown*`, `_arcMaxSeconds`), THEN zero matches appear outside files under `assets/data/` or files inheriting `DataRegistryEntry`. The allowlist is human-maintained and reviewed at every sprint; new gameplay-constant identifiers must be added before they can be referenced. The grep does NOT match generic integer or float literals (which produce unacceptably high false-positive rates) — it only matches allowlisted identifier names. Blocking failure produces a list of offending file paths and line numbers. **BLOCKING CI**
 
-### Gate Summary
+### Gate Summary (after revision)
 
 | Gate Level | Count | Systems / Files |
 |---|---|---|
-| **BLOCKING CI** | 16 | All R1-R8 (except R6+R8 advisory), D.1-D.3, EC-A1, EC-B2, EC-R1, EC-F1, EC-A2 (post-rename), AC-NHV |
-| **ADVISORY** | 4 | R6 atlas warning, R8 balance audit count, P1 build time, P3 memory |
-| **PLAYMODE** | 11 | All H.5 consumer integration + P2 load time |
-| **MANUAL** | 1 | EC-A2 rename observation (paired with BLOCKING CI follow-up) |
+| **BLOCKING CI** (Data Registry sprint gates) | 18 | R1a, R1b, R2, R3, R4, R5a, R5b, R5c, R7, R8a, R8b, R8d (decision logic), D1, D2, D3, EC-A1, EC-B2, EC-R1, EC-F1, AC-NHV |
+| **ADVISORY** | 6 | R6 atlas warning, R8 balance audit count, P1 build time, P2 scene-load, P3 memory schema, P4 Layer 2 latency |
+| **PLAYMODE (DEFERRED to consumer-system sprints)** | 11 | AC-C1..C11 — each gated by its consumer system's own sprint, not the Data Registry sprint |
+| **MANUAL** | 3 | R8c balance audit window sign-off, R8e Pillar 3 cross-loadout playtest (VS gate), EC-A2 rename observation |
+
+**Total**: 38 ACs (18 BLOCKING CI + 6 ADVISORY + 11 DEFERRED + 3 MANUAL). Data Registry sprint closes on the 18 BLOCKING CI + 6 ADVISORY + 1 MANUAL (R8c) gates. R8e triggers at VS gate, not at Data Registry sprint close.
 
 **Shift-left note for implementation**: the 16 BLOCKING CI criteria should have stub EditMode test files created at story start, before any SO schema is authored. The PLAYMODE integration criteria require a test scene fixture with pre-populated Catalog assets — this fixture is scaffolded during the same sprint as Catalog implementation, not deferred to QA hand-off.
 

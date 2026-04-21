@@ -22,8 +22,8 @@ The decomposition produces **30 systems across 5 layers** (Foundation / Core / F
 |---|-------------|----------|-------|----------|--------|------------|------------|
 | 1 | Input System | Core | Foundation | MVP | Not Started | — | (none) |
 | 2 | Scene / App State Manager | Core | Foundation | MVP | Not Started | — | (none) |
-| 3 | Data Registry (inferred) | Core | Foundation | MVP | Designed (pending `/design-review`) | [design/gdd/data-registry.md](data-registry.md) | (none) |
-| 4 | Save / Load (inferred) | Persistence | Foundation | MVP | Not Started | — | Data Registry |
+| 3 | Data Registry (inferred) | Core | Foundation | MVP | Revised (pending re-review — see [review log](reviews/data-registry-review-log.md)) | [design/gdd/data-registry.md](data-registry.md) | (none) |
+| 4 | Save / Load (inferred) | Persistence | Foundation | MVP | **NEEDS REVISION** (see [review log](reviews/save-load-review-log.md)) | [design/gdd/save-load.md](save-load.md) | Data Registry |
 | 5 | 2D Physics & Arc Trajectory | Gameplay | Foundation | MVP | Not Started | — | (none) |
 | 6 | Audio Bus (inferred) | Audio | Foundation | MVP | Not Started | — | (none) |
 | 7 | Event Bus (inferred, TD-added) | Core | Foundation | MVP | Designed (pending `/design-review`) | [design/gdd/event-bus.md](event-bus.md) | (none) |
@@ -251,10 +251,10 @@ Effort: S = 1 design session (~2-4 hours); M = 2-3 sessions; L = 4+ sessions.
 | Total systems identified | 31 |
 | Active (MVP/VS/v1.0) systems | 29 |
 | Post-launch (deferred) systems | 2 |
-| Design docs started | 2 |
-| Design docs reviewed | 0 |
+| Design docs started | 3 |
+| Design docs reviewed | 1 (Save/Load — MAJOR REVISION NEEDED) |
 | Design docs approved | 0 |
-| MVP systems designed | 2 / 20 (Data Registry + Event Bus; both pending independent review) |
+| MVP systems designed | 3 / 20 (Data Registry + Event Bus + Save/Load; all pending independent review) |
 | Vertical Slice systems designed | 0 / 5 (plus 2 MVP-minimal scope expansions) |
 | Shippable v1.0 systems designed | 0 / 4 |
 
