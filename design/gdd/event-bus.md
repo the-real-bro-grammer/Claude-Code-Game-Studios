@@ -287,6 +287,15 @@ Latency tiers: **T1** (< 16.67ms wall-clock, synchronous dispatch) for input res
 | Level Runtime | `gameplay.level.phase_changed` | Gameplay | `PhaseChangedPayload` | HUD, Tool System, Currency & Economy | T2 |
 | Level Runtime | `gameplay.level.complete` / `failed` | Gameplay + Feedback | `LevelEndPayload(bool Success, int FinalScore)` | Modal/Dialog + Level End, Audio Bus, Analytics (v1.0) | T2 |
 | Level Runtime | `gameplay.level.quota_progress` | Gameplay | `QuotaProgressPayload(int Current, int Target)` | HUD, Currency & Economy | T2 |
+| Currency & Economy | `gameplay.currency.changed` | Gameplay | `CurrencyChangedPayload(string CurrencyId, long NewBalance, long Delta)` | HUD, Save / Load | T2 |
+| Tool System / Shop | `gameplay.tool.purchased` | Gameplay | `ToolPurchasedPayload(string ToolId, long Price)` | Tool System (catalog refresh), Currency & Economy, Save / Load | T2 |
+| Tool System / Shop | `gameplay.tool.upgraded` | Gameplay | `ToolUpgradedPayload(string ToolId, int NewTier, long Price)` | Tool System (tier lookup), Currency & Economy, Save / Load | T2 |
+| Shop (VS) | `gameplay.cosmetic.purchased` | Gameplay | `CosmeticPurchasedPayload(string CosmeticId, long Price)` | Cosmetic/Skin System (VS+), Currency & Economy, Save / Load | T2 (inert at MVP — no MVP emitter) |
+| Progression | `gameplay.progression.node_unlocked` | Gameplay | `ProgressionNodeUnlockedPayload(string NodeId)` | Biome Map, HUD, Save / Load | T2 |
+| Progression / Biome Map | `gameplay.biome.unlocked` | Gameplay | `BiomeUnlockedPayload(string BiomeId)` | Biome Map, HUD, Save / Load | T2 |
+| Biome Map / Level Select | `gameplay.session.level_selected` | Gameplay | `SessionLevelSelectedPayload(string LevelId, string BiomeId)` | Level Runtime, Save / Load | T2 |
+
+**Pass-3 additions (lines above the section-break):** the 7 `gameplay.*` events below `gameplay.level.quota_progress` — `currency.changed`, `tool.purchased`, `tool.upgraded`, `cosmetic.purchased`, `progression.node_unlocked`, `biome.unlocked`, `session.level_selected` — were added to close Save/Load pass-2 OQ-4. Save/Load subscribes to each as a durable-consequence write trigger per its R7 snapshot-coalescing contract. Event IDs chosen to match Save/Load's proposed naming without reshaping; emitters stay with the system of record for each state transition.
 
 **No event may span frames in the synchronous dispatch path** — R2's deferred queue handles re-entrant fires.
 
