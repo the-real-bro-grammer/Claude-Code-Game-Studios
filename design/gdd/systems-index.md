@@ -26,7 +26,7 @@ The decomposition produces **30 systems across 5 layers** (Foundation / Core / F
 | 4 | Save / Load (inferred) | Persistence | Foundation | MVP | **NEEDS REVISION** (see [review log](reviews/save-load-review-log.md)) | [design/gdd/save-load.md](save-load.md) | Data Registry |
 | 5 | 2D Physics & Arc Trajectory | Gameplay | Foundation | MVP | Not Started | — | (none) |
 | 6 | Audio Bus (inferred) | Audio | Foundation | MVP | Not Started | — | (none) |
-| 7 | Event Bus (inferred, TD-added) | Core | Foundation | MVP | **Revised pass-1 — pending re-review** (see [review log](reviews/event-bus-review-log.md)) | [design/gdd/event-bus.md](event-bus.md) | (none) |
+| 7 | Event Bus (inferred, TD-added) | Core | Foundation | MVP | **Approved** (pass 3 revision accepted 2026-04-21 without further adversarial review, per CD pass-2 guidance — see [review log](reviews/event-bus-review-log.md)) | [design/gdd/event-bus.md](event-bus.md) | (none) |
 | 8 | Level Runtime | Gameplay | Core | MVP | Not Started | — | Scene Manager, Data Registry, Save/Load, Input, Audio, Event Bus |
 | 9 | Level Scoring (TD-split from Level Runtime) | Gameplay | Core | MVP | Not Started | — | Level Runtime, Data Registry, Event Bus |
 | 10 | Gopher Spawn & Launch | Gameplay | Core | MVP | Not Started | — | Data Registry, 2D Physics, Level Runtime, Event Bus |
@@ -252,9 +252,9 @@ Effort: S = 1 design session (~2-4 hours); M = 2-3 sessions; L = 4+ sessions.
 | Active (MVP/VS/v1.0) systems | 29 |
 | Post-launch (deferred) systems | 2 |
 | Design docs started | 3 |
-| Design docs reviewed | 2 (Data Registry — APPROVED pass 4; Save/Load — MAJOR REVISION NEEDED) |
-| Design docs approved | 1 (Data Registry) |
-| MVP systems designed | 3 / 20 (Data Registry + Event Bus + Save/Load; all pending independent review) |
+| Design docs reviewed | 3 (Data Registry — APPROVED pass 4; Event Bus — APPROVED after pass-3 revision accepted; Save/Load — MAJOR REVISION NEEDED) |
+| Design docs approved | 2 (Data Registry, Event Bus) |
+| MVP systems designed | 3 / 20 (Data Registry + Event Bus approved; Save/Load pending revision) |
 | Vertical Slice systems designed | 0 / 5 (plus 2 MVP-minimal scope expansions) |
 | Shippable v1.0 systems designed | 0 / 4 |
 
