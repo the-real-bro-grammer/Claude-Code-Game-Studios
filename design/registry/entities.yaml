@@ -37,7 +37,7 @@
 #   Each entry: name, status, source, referenced_by[], attributes{}, added, revised
 
 version: 1
-last_updated: 2026-04-20  # Save/Load GDD completed — 3 referenced_by additions (t1/t2_latency_max + gameplay_channel_regex)
+last_updated: 2026-04-21  # Save/Load pass-3 OQ-4 closed + pass-4 APPROVED; consistency-check repaired Event Bus subscriber rows 280/288 and updated gameplay_channel_regex notes
 
 # ─── ENTITIES ────────────────────────────────────────────────────────────────
 # Named game-world objects: enemies, NPCs, characters, factions, bosses.
@@ -228,9 +228,9 @@ constants:
       - design/gdd/save-load.md
     value: "^gameplay\\.[a-z_]+\\.[a-z_]+$"
     unit: regex
-    notes: "Format regex for Gameplay-namespace event IDs (internal events: phase_changed, quota_progress, banked, gopher.launched, etc.). Event Bus R5 enforces namespace distinction from Feedback. Save/Load subscribes to gameplay.* channels as write triggers and proposes 7 new gameplay.* events (save-load.md OQ-4) that must be added to Event Bus's Section C Interactions table before implementation."
+    notes: "Format regex for Gameplay-namespace event IDs (internal events: phase_changed, quota_progress, banked, gopher.launched, etc.). Event Bus R5 enforces namespace distinction from Feedback. Save/Load subscribes to gameplay.* channels as write triggers; the 7 additional gameplay.* events from save-load.md OQ-4 (currency.changed, tool.purchased, tool.upgraded, cosmetic.purchased, progression.node_unlocked, biome.unlocked, session.level_selected) were patched into Event Bus's Section C Interactions table on 2026-04-21 during Save/Load pass-3 revision. Save/Load is also a subscriber on the pre-existing gameplay.level.banked and gameplay.level.complete/failed rows (corrected 2026-04-21 via /consistency-check)."
     added: 2026-04-20
-    revised: ""
+    revised: 2026-04-21  # consistency-check: updated notes to reflect OQ-4 closure + Event Bus subscriber-row repair (rows 280/288)
 
 # Example:
 #

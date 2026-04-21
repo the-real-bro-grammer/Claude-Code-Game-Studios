@@ -23,7 +23,7 @@ The decomposition produces **30 systems across 5 layers** (Foundation / Core / F
 | 1 | Input System | Core | Foundation | MVP | Not Started | — | (none) |
 | 2 | Scene / App State Manager | Core | Foundation | MVP | Not Started | — | (none) |
 | 3 | Data Registry (inferred) | Core | Foundation | MVP | **Approved** (pass 4 targeted verification 2026-04-21 — see [review log](reviews/data-registry-review-log.md)) | [design/gdd/data-registry.md](data-registry.md) | (none) |
-| 4 | Save / Load (inferred) | Persistence | Foundation | MVP | **Revised pass 3** (2026-04-21 fix pass — all pass-1 and pass-2 blockers addressed; R10 keystone re-grounded off-main; R12 banned-list expanded; AC table regenerated to 60 identifiers; OQ-1/OQ-4 closed; Event Bus patched with 7 new gameplay.* events; pending targeted pass-4 verification or acceptance per CD policy; see [review log](reviews/save-load-review-log.md)) | [design/gdd/save-load.md](save-load.md) | Data Registry |
+| 4 | Save / Load (inferred) | Persistence | Foundation | MVP | **Approved** (pass 4 targeted verification 2026-04-21 — all 25 pass-1+pass-2 blockers verified resolved; Gate Summary reconciles to 60 ACs; 1 advisory nice-to-have; see [review log](reviews/save-load-review-log.md)) | [design/gdd/save-load.md](save-load.md) | Data Registry |
 | 5 | 2D Physics & Arc Trajectory | Gameplay | Foundation | MVP | Not Started | — | (none) |
 | 6 | Audio Bus (inferred) | Audio | Foundation | MVP | Not Started | — | (none) |
 | 7 | Event Bus (inferred, TD-added) | Core | Foundation | MVP | **Approved** (pass 3 revision accepted 2026-04-21 without further adversarial review, per CD pass-2 guidance — see [review log](reviews/event-bus-review-log.md)) | [design/gdd/event-bus.md](event-bus.md) | (none) |
@@ -252,9 +252,9 @@ Effort: S = 1 design session (~2-4 hours); M = 2-3 sessions; L = 4+ sessions.
 | Active (MVP/VS/v1.0) systems | 29 |
 | Post-launch (deferred) systems | 2 |
 | Design docs started | 3 |
-| Design docs reviewed | 3 (Data Registry — APPROVED pass 4; Event Bus — APPROVED after pass-3 revision accepted; Save/Load — Revised pass 3 2026-04-21, pending pass-4 verification or direct acceptance) |
-| Design docs approved | 2 (Data Registry, Event Bus) |
-| MVP systems designed | 3 / 20 (Data Registry + Event Bus approved; Save/Load revised pass 3, pending verification) |
+| Design docs reviewed | 3 (Data Registry — APPROVED pass 4; Event Bus — APPROVED after pass-3 revision accepted; Save/Load — APPROVED pass 4 targeted verification 2026-04-21) |
+| Design docs approved | 3 (Data Registry, Event Bus, Save/Load) |
+| MVP systems designed | 3 / 20 (Data Registry + Event Bus + Save/Load approved) |
 | Vertical Slice systems designed | 0 / 5 (plus 2 MVP-minimal scope expansions) |
 | Shippable v1.0 systems designed | 0 / 4 |
 

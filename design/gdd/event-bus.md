@@ -277,7 +277,7 @@ Latency tiers: **T1** (< 16.67ms wall-clock, synchronous dispatch) for input res
 | Input System | `input.drag.start` / `input.drag.end` | Feedback | `DragPayload(Vector2, Vector2)` | VFX/Juice, Tool Preview | T1 |
 | Collection System | `audio.collect.coin.success` (+ gameplay channel) | Feedback + Gameplay | `CollectionSuccessPayload` | Audio Bus, VFX/Juice, HUD, Currency & Economy | T1 |
 | Collection System | `audio.collect.miss` | Feedback | `CollectionMissPayload(Vector2)` | Audio Bus, VFX/Juice | T1 |
-| Collection System | `gameplay.level.banked` | Gameplay | `BankedPayload(int TotalBanked)` | Currency & Economy, HUD | T2 |
+| Collection System | `gameplay.level.banked` | Gameplay | `BankedPayload(int TotalBanked)` | Currency & Economy, HUD, Save / Load | T2 |
 | Tool System | `audio.tool.place.ramp` (+ gameplay) | Feedback + Gameplay | `ToolEventPayload(ToolType, Vector2)` | Audio Bus, VFX/Juice, Level Runtime | T2 |
 | Tool System | `audio.tool.consumable.deploy` | Feedback | `ConsumableDeployedPayload(ToolType, Vector2)` | Audio Bus, VFX/Juice | T1 |
 | Hazard System | `audio.hazard.bomb.detonate` (+ gameplay) | Feedback + Gameplay | `BombDetonatedPayload` | Audio Bus, VFX/Juice, Currency & Economy, HUD | T1 |
@@ -285,7 +285,7 @@ Latency tiers: **T1** (< 16.67ms wall-clock, synchronous dispatch) for input res
 | Critter AI | `audio.critter.dog.deploy` / `caught` / `return` | Feedback + Gameplay | `DogEventPayload(int AgentID, Vector2)` | Audio Bus, VFX/Juice, HUD | T2 |
 | Gopher Spawn | `gameplay.gopher.launched` | Gameplay | `GopherLaunchedPayload(int GopherID, LootTableId LootTableId)` (LootTableId is int-backed enum per R7.a) | Collection System, VFX/Juice | T2 |
 | Level Runtime | `gameplay.level.phase_changed` | Gameplay | `PhaseChangedPayload` | HUD, Tool System, Currency & Economy | T2 |
-| Level Runtime | `gameplay.level.complete` / `failed` | Gameplay + Feedback | `LevelEndPayload(bool Success, int FinalScore)` | Modal/Dialog + Level End, Audio Bus, Analytics (v1.0) | T2 |
+| Level Runtime | `gameplay.level.complete` / `failed` | Gameplay + Feedback | `LevelEndPayload(bool Success, int FinalScore)` | Modal/Dialog + Level End, Audio Bus, Analytics (v1.0), Save / Load | T2 |
 | Level Runtime | `gameplay.level.quota_progress` | Gameplay | `QuotaProgressPayload(int Current, int Target)` | HUD, Currency & Economy | T2 |
 | Currency & Economy | `gameplay.currency.changed` | Gameplay | `CurrencyChangedPayload(string CurrencyId, long NewBalance, long Delta)` | HUD, Save / Load | T2 |
 | Tool System / Shop | `gameplay.tool.purchased` | Gameplay | `ToolPurchasedPayload(string ToolId, long Price)` | Tool System (catalog refresh), Currency & Economy, Save / Load | T2 |

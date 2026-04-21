@@ -195,3 +195,62 @@ Per CD pass-2 guidance on Event Bus ("targeted pass-4 verification is the next s
 ### Escalation Note
 
 Not warranted at this stage. Pass-3 revision landed with design decisions explicitly made (not deferred); no systemic disagreement pattern remains.
+
+---
+
+## Review — 2026-04-21 — Verdict: APPROVED (Pass 4 — Targeted Verification)
+
+**Scope signal**: L
+**Specialists**: None (targeted pass-4 per CD Event Bus precedent — spot-check applied fixes, NOT full adversarial re-run; session state explicitly authorized lean depth)
+**Blocking items**: 0 | **Recommended**: 0 | **Nice-to-have**: 1
+**Prior verdict resolved**: Yes — all 25 pass-1 + pass-2 blockers verified resolved against pass-3 revision
+
+### Summary
+
+Targeted pass-4 verification against the pass-3 fix pass. All 10 pass-1 blockers + 15 pass-2 blockers traced to specific line-level resolutions in the current GDD. Keystone R10 correction propagates cleanly through D.2 pause-cost derivation, pseudocode (POCOs-in-queue), and pause-path exception docs. R11's pure-semaphore pause path architecturally eliminates the IL2CPP deadlock vector (not merely by discipline). R12 banned-list is now exhaustive with worker-thread round-trip test enforcement. Player Fantasy matches Resume Policy (career-progress framing). Gate Summary body-verified at 60 ACs (21 BLOCKING CI + 33 PLAYMODE + 5 DEVICE + 1 ADVISORY). No remaining factual errors, formula inconsistencies, or AC gaps. GDD is implementation-ready pending ADR-003 (reference device selection) for the 5 DEVICE-tier ACs, which is a tracked pre-production action item.
+
+### Blocker Resolution Trace
+
+All 15 pass-2 top blockers verified resolved:
+
+1. R10 JsonUtility threading rationale (keystone) → R10 rewritten lines 89-102
+2. R12 generic `KVPair<K,V>` field-drop → concrete non-generic structs lines 119-120, 134-142
+3. R12 banned-list incomplete → exhaustive list lines 121-132 (HashSet/SortedSet/Queue/Stack, nested Lists, readonly/init, properties, record, interfaces, DateTime/TimeSpan/Guid, nullable value types, UnityEngine.Object)
+4. R11 `task.Wait()` IL2CPP deadlock → pure synchronous `SemaphoreSlim.Wait()` lines 104-114 + AC-R11a
+5. D.1 output range → [30, 3000] with default 250 ms lines 277-283
+6. D.2 ceiling → widened to 3000 ms line 305
+7. R8.b missing version guard → ordering guard line 80 + AC-R8b-reject line 621
+8. Player Fantasy vs Resume Policy → career-progress rewrite lines 30-40
+9. OQ-1 load-bearing → "keep banked" committed line 263
+10. AC-R9 MANUAL split → AC-R9a (BLOCKING CI) + AC-R9b (ADVISORY) lines 625-626
+11. AC-R11 dual-tag split → AC-R11a (PLAYMODE) + AC-R11b (DEVICE) lines 631-632
+12. No named reference device → deferred to ADR-003 with scope expansion, line 604
+13. Gate Summary arithmetic → 21+33+5+1=60 body-verified lines 687-696
+14. Multi-key main-thread flush cost → resolved automatically by R10 correction, noted line 324
+15. R3 fsync OEM caveat → OneUI 3.x–4.x caveat + architectural mitigation line 52
+
+Additional pass-2 findings all resolved: R4 migrator-chain ambiguity (R4.a–R4.d + invariant table + AC-R4c), R7 producer coherency (R7.a + AC-R7a), SemaphoreSlim disposal (AC-EC-Race3), AC-P3 32 KB anchored to D.3a.
+
+All 7 coverage-gap ACs present: AC-R13a, AC-EC-Race3, AC-EC-Uninit, AC-EC-PlaytestIsolation, AC-R10c, AC-R10d, AC-R4c.
+
+### Nice-to-Have (non-blocking)
+
+1. **OQ-4 not listed in "Closed in Pass-3 Revision" subsection** — lines 710-712 list only OQ-1 as closed. OQ-4 is functionally closed (Interactions table at lines 239-245 reads "Exists in Event Bus GDD (pass-3 addition 2026-04-21)") but isn't declared closed explicitly in that subsection. Pure housekeeping for audit-trail symmetry.
+
+### Pillar Alignment
+
+- **Pillar 3 (Mastery Through Economy)**: Served and mechanically enforced. AC-R9a CI grep protects the no-pay-to-win anti-pillar; AC-R9b advisory catches renamed violations.
+- **Pillar 4 (Prep + React)**: Served. Player Fantasy now matches Resume Policy (career-progress framing replaces the prior contradictory "run resumes cleanly" promise).
+- **Player Fantasy**: Defensible as written.
+
+### Specialist Disagreements
+
+N/A — no specialists spawned (targeted verification). CD Event Bus precedent explicitly authorizes this depth for post-pass-3 verification when the revision addresses identified blockers 1:1.
+
+### Senior Verdict
+
+APPROVED. Pass-3 revision is thorough, internally consistent, and traceable line-by-line to pass-1 + pass-2 blockers. Implementation-ready pending ADR-003 (DEVICE-tier ACs gated on reference device selection; tracked as pre-production action item). No escalation warranted.
+
+### Next Re-Review
+
+None required. Save/Load promoted from "Revised pass 3" to APPROVED in systems-index. 3 of 20 MVP GDDs now approved (Data Registry, Event Bus, Save/Load).
