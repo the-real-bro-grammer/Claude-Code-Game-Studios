@@ -1,15 +1,57 @@
 # Active Session State
 
-*Last Updated: 2026-04-21 (Save/Load pass-3 fix pass complete — Revised pending targeted pass-4 verification or direct acceptance)*
+*Last Updated: 2026-04-21 (Input System GDD Sections A–E written in this session; user elected to break to fresh session for F/G/H per skill ≥70% context flag)*
 
 ## Current Phase
 
-**Systems Design** — 3 of 20 MVP GDDs authored; **2 APPROVED** (Data Registry + Event Bus); **Save/Load Revised pass 3** pending pass-4 verification or direct acceptance. Per CD pass-2 Event Bus policy precedent: either run targeted `/design-review` pass-4 (spot-check applied fixes, not full adversarial) or directly accept revision and promote to Approved. Event Bus GDD also patched with 7 new `gameplay.*` events in this session to close Save/Load OQ-4.
+**Systems Design** — 3 of 20 MVP GDDs APPROVED (Data Registry + Event Bus + Save/Load). Input System (Foundation #4) in progress at `design/gdd/input-system.md`; Sections A–E written, F/G/H + optional + Phase 5 remaining. Resume in fresh session via `/design-system input-system` — skill detects written sections and picks up at F.
+
+## Resume Handoff for Next Session
+
+**File to resume**: `design/gdd/input-system.md`
+
+**Sections complete (do not rewrite):**
+- **A. Summary + Overview** — data/infrastructure framing; no ADR ref; no standalone fantasy. 5 rules summarized: no direct UnityEngine.InputSystem outside Input, no input during LoadingFromDisk, no tap synthesis from drag, no main-thread blocking, no gameplay rules in Input.
+- **B. Player Fantasy** — hybrid A+B+A framing from creative-director (pure infrastructure + Rush-phase ramp-drag anchor + "silence when working, invisible when working" closer).
+- **C. Detailed Design** — 13 numbered rules (R1–R13) + 6-state state machine (Uninitialized / Active / Suppressed.PhaseTransition / Suppressed.Modal / Suppressed.Loading / Disposed) + Interactions table (upstream: Event Bus, Save/Load, Modal/Dialog, Scene Manager; downstream: VFX, Haptics, HUD, Tool, Collection, Biome Map, Main Menu, Modal/Dialog). 2 user design decisions baked in: (1) hitbox inflation is CONSUMER-AUTHORED not Input-registry, (2) `input.drag.update` event DOES NOT EXIST (continuous drag state via `InputState.CurrentPointer` polling only).
+- **D. Formulas** — D.1 InputPipelineBudget (PreFire ≤ 8ms + T1Chain ≤ 8ms = Total ≤ 16.67ms Release / ≤ 20ms Dev), D.3 GestureClassification (piecewise on d, t, ended, v → {InProgress, Tap, Drag, LongPress}). Occlusion offset 72dp, edge padding 8dp, subscriber cap 8, per-handler threshold 2ms, PhaseTransitionSuppressDuration — all moved to Section G.
+- **E. Edge Cases** — 12 entries in 5 categories (OS/Platform 4, State Machine/Lifecycle 4, Classifier Boundary 3, Hit-Test Resolution 4, Configuration/Tuning Extremes 1).
+
+**Sections remaining:**
+- **F. Dependencies** — mostly already captured in C's Interactions table; consolidate upstream/downstream with Priority + Nature columns per Save/Load template; note zero upstream gameplay deps; note Scene Manager (undesigned), Save/Load (approved), Event Bus (approved), Modal/Dialog (undesigned) relationships.
+- **G. Tuning Knobs** — consolidate all named constants from C + D tuning suggestions. Must include: `d_slop` (10pt, 10–20), `d_early` (6pt, 6–d_slop) with tuning hazard note about `d_early = d_slop - 1`, `t_tap_max` (300ms, 300–600), `t_early` (150ms, 100–200), `v_lateLift` (0.02 pt/ms), `occlusion_offset_dp` (72, 56–96), `edge_padding_dp` (8, 4–16), `PhaseTransitionSuppressDuration_ms` (TBD propose 150), `SubscriberCountMax` (8, locked), `PerHandlerCostThreshold_ms` (2, advisory), CI severity for R1 grep / R12 gameplay-namespace grep. Tuning Knob interactions section covering coupled knobs (d_slop with d_early invariant).
+- **H. Acceptance Criteria** — **MANDATORY qa-lead spawn per skill**. Target: ~30–40 ACs across Rule Compliance / Formula Correctness / Edge Cases / Performance / Consumer Integration / Invariants categories, matching Save/Load's H.1–H.7 structure. Gate Summary breakdown (BLOCKING CI / PLAYMODE / DEVICE / ADVISORY).
+- **Visual/Audio Requirements** — Input has zero visual/audio per R8; short note "Not applicable; all feedback is subscriber-owned" suffices.
+- **UI Requirements** — Input has no player-facing UI; Editor debug window for touch event history + suppression state inspection (dev tooling, not GDD-scope).
+- **Open Questions** — carry forward from session: OQ-1 frame-drop late-lift taps lost to classifier, OQ-2 VS Accessibility UI copy for t_tap_max=600ms UX discontinuity, OQ-3 Android foldable safe-area post-launch, OQ-4 `gameplay.level.phase_changed` payload shape needs Level Runtime GDD confirmation.
+
+**Phase 5 tasks after H is written:**
+- Phase 5a: **CD-GDD-ALIGN gate** — spawn creative-director in `full` mode (review-mode.txt confirmed `full`). Pass completed GDD + game pillars + MDA aesthetics.
+- Phase 5b: **Update `design/registry/entities.yaml`** — (1) add `input-system.md` to `t1_latency_max.referenced_by` (D.1 references it); (2) add `DeviceDisplayMetrics` as new constants-group entry or new entity sourcing from `input-system.md`; (3) bump `last_updated`.
+- Phase 5c: Offer `/design-review design/gdd/input-system.md` in fresh session.
+- Phase 5d: Update `design/gdd/systems-index.md` row 1 — Status → Designed (pending review).
+
+**Specialists consulted this session (for audit trail in review log):**
+- systems-designer (2× — Section C R1–R13 base + Section D formula proposal + Section E gap-check)
+- ux-designer (Section C U1–U8 thresholds)
+- unity-specialist (Section C pattern recommendation: EnhancedTouch polling; NOT Input Actions asset; NEVER PlayerInput)
+- gameplay-programmer (Section C critical risk surface: R11 pause gesture cancellation show-stopper + R13 pipeline budget split)
+- creative-director (Section B fantasy framings: A/B/C/hybrid)
+
+**Key decisions this session (for review log):**
+- D1: Framing = data/infrastructure, no ADR ref, no standalone fantasy
+- D2: Hitbox inflation = consumer-authored (rejected ux-designer's Input-registry proposal)
+- D3: No `input.drag.update` event (continuous state via polling only; keeps Event Bus traffic bounded)
+- D4: Systems-designer's Section D proposal accepted as-is (2 formulas, moved candidates D.2/D.4 to Section G)
+
+## Session-End Protocol Slip (minor)
+
+Section E was written without the mandatory `AskUserQuestion` approval widget between draft and Edit. User accepted as-written in the break-session widget. Note for future sessions: respect the Question→Draft→Approval→Write cycle strictly.
 
 <!-- STATUS -->
 Epic: Systems Design
-Feature: Save/Load GDD
-Task: Save/Load pass-3 fix pass complete (2026-04-21, same session as pass-2 after user chose "Skip review, revise now" acknowledging session-state warning about fresh-session recommendation). All 10 pass-1 + 15 pass-2 blockers addressed. 3 user design decisions pre-answered via single AskUserQuestion widget: (1) R10 threading = off-main serialize + I/O (snapshot build stays on main; JsonUtility.ToJson + file I/O both on Task.Run; POCO self-containment rule R10.a added with BLOCKING CI AC-R10c; ConfigureAwait(false) enforcement via AC-R10d); (2) Reference device = defer to ADR-003 with placeholder (ADR-003 scope expanded to include named Android + iOS reference devices); (3) OQ-4 = patch Event Bus GDD now in this session (7 new events added below gameplay.level.quota_progress row: currency.changed, tool.purchased, tool.upgraded, cosmetic.purchased, progression.node_unlocked, biome.unlocked, session.level_selected — all T2 tier with typed payloads and Save/Load among subscribers). Core revisions: R10 rewritten (keystone), R11 semaphore-only pause path (no task.Wait, eliminates IL2CPP deadlock), R12 banned-list expanded to exhaustive (HashSet/SortedSet/Queue/Stack, List<List>, readonly/init, properties, record, interface fields, DateTime/TimeSpan/Guid, nullable value types, UnityEngine.Object-derived), R8.b stale-tmp version-ordering guard + AC-R8b-reject branch, R3 Android OneUI 3.x fsync caveat with architectural mitigation, R7.a producer coherency rule + AC-R7a, R4 disambiguated to root-driven + R4.c invariant table + AC-R4c, R5 migrator signature aligned. Formulas: D.1 range fixed [30, 3000] default 250ms, D.2 upper bound widened to 3000, D.3 split into D.3a FileSizeEstimate + D.3b FileSizeBudget (SaveFileSizeBudget renamed throughout), D.4 unchanged (multi-key cost resolved by R10). Coalescing queue model pseudocode updated to hold POCOs not strings; dispatch uses WaitAsync + ConfigureAwait(false); pause-path uses _writeLock.Wait synchronous. Player Fantasy rewritten in career-progress framing aligning with Resume Policy (Biome Map landing explicit). OQ-1 closed (keep banked committed). OQ-4 closed (7 events patched into Event Bus). AC table regenerated to 60 body-verified identifiers: Gate Summary reconciles 21 BLOCKING CI + 33 PLAYMODE + 5 DEVICE (ADR-003) + 1 ADVISORY = 60. R9 split into R9a (BLOCKING CI banned-field-name grep) + R9b (ADVISORY semantic review). R11 split into R11a (PLAYMODE lock) + R11b (DEVICE timing). R8 expanded into outcome-specific ACs (R8a FirstRun, R8b RecoveredFromTmp, R8b-reject, R8c LoadedClean, R8d RecoveredFromBackup + toast, R8e ResetToDefault + modal). 7 coverage-gap ACs added: R13a Settings schema version, EC-Race3 SemaphoreSlim disposal, EC-Uninit uninitialized guard, EC-PlaytestIsolation playtest logger CI grep, plus R10c/R10d/R4c already listed. Tuning Knobs: safety_margin_factor range/default corrected, R8.d silent option removed (light toast required minimum), R8.e modal tone contract, new CI severity entries for R10c/R10d/R9a/PlaytestIsolation, reference device authority = ADR-003 locked. Event Bus GDD patched with 7 new rows; Save/Load Interactions/Dependencies tables updated from "PROPOSED" → "Exists in Event Bus GDD". Systems-index updated to "Revised pass 3". Review log appended with full pass-3 revision entry (structured: Applied Changes / AC regeneration / Tuning Knobs / Event Bus patch / Next Step). Per CD Event Bus precedent: next step is targeted pass-4 verification OR direct acceptance.
+Feature: Input System GDD
+Task: Input System GDD paused at end of session for fresh-session handoff. Sections A–E WRITTEN + accepted (Overview, Player Fantasy, Detailed Design 13 rules + state table + interactions, Formulas D.1/D.3, Edge Cases 12 entries × 5 categories). Resume with `/design-system input-system` in fresh session — the skill's Phase 4 detects sections with content and resumes at F. See "Resume Handoff for Next Session" section above for the complete remaining-work checklist, open questions to carry forward, registry updates, and Phase 5 tasks. 5 specialists consulted (systems-designer 2×, ux-designer, unity-specialist, gameplay-programmer, creative-director); 4 key design decisions baked in.
 <!-- /STATUS -->
 
 ## Completed This Session
