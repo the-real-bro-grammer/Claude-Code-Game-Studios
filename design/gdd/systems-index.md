@@ -22,7 +22,7 @@ The decomposition produces **30 systems across 5 layers** (Foundation / Core / F
 |---|-------------|----------|-------|----------|--------|------------|------------|
 | 1 | Input System | Core | Foundation | MVP | Not Started | — | (none) |
 | 2 | Scene / App State Manager | Core | Foundation | MVP | Not Started | — | (none) |
-| 3 | Data Registry (inferred) | Core | Foundation | MVP | Revised (pending re-review — see [review log](reviews/data-registry-review-log.md)) | [design/gdd/data-registry.md](data-registry.md) | (none) |
+| 3 | Data Registry (inferred) | Core | Foundation | MVP | Revised pass 2 (pending re-review — see [review log](reviews/data-registry-review-log.md)) | [design/gdd/data-registry.md](data-registry.md) | (none) |
 | 4 | Save / Load (inferred) | Persistence | Foundation | MVP | **NEEDS REVISION** (see [review log](reviews/save-load-review-log.md)) | [design/gdd/save-load.md](save-load.md) | Data Registry |
 | 5 | 2D Physics & Arc Trajectory | Gameplay | Foundation | MVP | Not Started | — | (none) |
 | 6 | Audio Bus (inferred) | Audio | Foundation | MVP | Not Started | — | (none) |

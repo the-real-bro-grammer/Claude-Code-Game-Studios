@@ -4,12 +4,12 @@
 
 ## Current Phase
 
-**Systems Design** — 3 of 20 MVP GDDs complete: Data Registry (revised, pending re-review) + Event Bus (pending review) + Save/Load (NEEDS REVISION per prior review). Next: re-review Data Registry in fresh session, then Input System GDD (Foundation #4).
+**Systems Design** — 3 of 20 MVP GDDs complete: Data Registry (revised pass 2, pending pass 3 re-review) + Event Bus (pending first review) + Save/Load (NEEDS REVISION per prior review). Next action: /clear, then re-review Data Registry in the fresh session.
 
 <!-- STATUS -->
 Epic: Systems Design
 Feature: Data Registry GDD
-Task: /design-review 2026-04-21 — verdict MAJOR REVISION NEEDED → REVISED (same session). 12 blocking items resolved + major recommended items applied. Edits touched ~30 sections: R4 GUID model rewritten, EC-R2 lazy-init, Edge Case labels (EC-A*/B*/R*/F*), C_rate conflict resolved, LootTable cleanup, Pillar 3 scope disclaim + AC-R8e VS playtest gate, MVP shop note, AC-D1/D2 fixtures in-range, R1/R5 split, R8c artifact-gated, R8d decision-logic only, NHV allowlist, C1-C11 DEFERRED, P1 tightened to 5ms, P4 added, 30% threshold promoted to tuning knob, gate summary recounted (38 ACs). Awaiting independent re-review in fresh session.
+Task: /design-review pass 2 (2026-04-21) — verdict NEEDS REVISION → REVISED (same session). 12 new blocking items resolved after pass-1 same-session revision also resolved 12 different blockers. Pass-2 fixes: R3.a catalog population via AssetPostprocessor auto-scan; R4 split into Mechanism A (OnValidate, rename) + Mechanism B (AssetPostprocessor movedAssets[], folder-move); R4 Persistence pattern with EditorUtility.SetDirty + EditorApplication.delayCall + AssetDatabase.SaveAssetIfDirty; Unity 6.3 API currency (AssetDatabase.GUIDFromAssetPath(path).ToString() replaces deprecated AssetPathToGUID throughout R4/EC-A1/EC-A2/EC-B2/AC-R4/AC-EC-B2); AC-P1 rewritten to measure first-GetById (lazy-init path), not OnEnable; AC-P1/P2 arithmetic reconciled (per-Catalog 4ms × 11 = 44ms fits 50ms aggregate); AC-D1 fixture swapped to [1,9999,1] (float32-safe), normalization in double; AC-D2 full 3-tool synthetic category fixture table spelled out (T_A/T_B/T_C producing mean=0.05); AC-R1b rewritten as Roslyn analyzer DR0001 (grep can't resolve receiver types); AC-R5b fixture existence note with named path tests/editmode/data-registry/fixtures/layer2/; AC-EC-B2 uses on-disk fixture at tests/editmode/data-registry/fixtures/hex-edit/; gate summary recounted (39 identifiers: 19 BLOCKING CI + 6 ADVISORY + 11 DEFERRED + 3 MANUAL; EC-F1 folded as fixture row in AC-D3); ProgressionNode reward type enum closed to {COINS, GEMS, TOOL_UNLOCK, LEVEL_UNLOCK, BIOME_UNLOCK} gated by Monetization ADR. Awaiting pass-3 independent re-review in fresh session. 16 RECOMMENDED items deferred (see review log).
 <!-- /STATUS -->
 
 ## Completed This Session
@@ -37,8 +37,9 @@ Task: /design-review 2026-04-21 — verdict MAJOR REVISION NEEDED → REVISED (s
 - [x] **`/design-system data-registry`** — ✅ Complete (pending review)
 - [x] **`/design-system event-bus`** — ✅ Complete (pending review)
 - [x] **`/design-system save-load`** — ✅ Complete, CD-GDD-ALIGN APPROVED (pending review)
-- [x] **`/design-review design/gdd/data-registry.md`** — 2026-04-21, MAJOR REVISION NEEDED → REVISED in-session. Awaiting independent re-review in fresh session. See `design/gdd/reviews/data-registry-review-log.md`.
-- [ ] **`/design-review design/gdd/data-registry.md` (re-review)** — run in a FRESH session after /clear to validate the 12 blocking fixes
+- [x] **`/design-review design/gdd/data-registry.md`** — 2026-04-21 pass 1, MAJOR REVISION NEEDED → REVISED in-session (12 structural blockers). See review log pass-1 entry.
+- [x] **`/design-review design/gdd/data-registry.md` (pass 2)** — 2026-04-21, NEEDS REVISION → REVISED in-session (12 precision blockers). See review log pass-2 entry.
+- [ ] **`/design-review design/gdd/data-registry.md` (pass 3)** — run in a FRESH session after /clear to independently validate pass-2 fixes
 - [ ] **`/design-review design/gdd/event-bus.md`** — run in a FRESH session for independent validation
 - [ ] **`/design-review design/gdd/save-load.md`** — run in a FRESH session for independent validation
 - [ ] **`/consistency-check`** — recommended before designing the next system (verify save-load values don't conflict with existing GDDs)
