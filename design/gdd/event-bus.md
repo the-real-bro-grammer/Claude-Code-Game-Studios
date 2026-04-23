@@ -1,6 +1,6 @@
 # Event Bus
 
-> **Status**: **APPROVED** 2026-04-21 — pass-3 revision accepted by user without further adversarial review, per CD pass-2 guidance ("Pass 3 should be gate-check-ready, not a third adversarial round"). 20 pass-2 blockers + 1 structural D.4 amendment resolved in fresh-session fix pass.
+> **Status**: **APPROVED (with pass-4 cross-coordination amendment 2026-04-22)** — pass-3 revision accepted 2026-04-21 without further adversarial review per CD pass-2 guidance; pass-4 amendment adds `T1_per_frame_aggregate_ms = 8ms` locked constant + AC-F4-aggregate per input-system.md review log 2026-04-22 pass-2 BLOCKING #4. Amendment is additive (new constant + new AC); no prior contracts revised. APPROVED status is preserved on the basis that the amendment closes a cross-GDD coordination gap the prior review did not surface, rather than revising a decision the prior review had ratified. 20 pass-2 blockers + 1 structural D.4 amendment resolved in fresh-session fix pass (2026-04-21); pass-4 cross-coordination amendment added 2026-04-22.
 > **Author**: Robert Michael Watson + systems-designer / unity-specialist / creative-director / qa-lead / performance-analyst / game-designer
 > **Last Updated**: 2026-04-21 (pass-3 revision)
 > **Implements Pillar**: Foundation for Pillars 1 (Cute Chaos), 2 (Readable at a Glance), 5 (No Input Goes Silent). Indirect support for 3 and 4 via decoupling.
@@ -275,6 +275,9 @@ Latency tiers: **T1** (< 16.67ms wall-clock, synchronous dispatch) for input res
 |---|---|---|---|---|---|
 | Input System | `input.tap.main` | Feedback | `TapPayload(Vector2, GameObject?)` | VFX/Juice, Haptics, HUD | T1 |
 | Input System | `input.drag.start` / `input.drag.end` | Feedback | `DragPayload(Vector2, Vector2)` | VFX/Juice, Tool Preview | T1 |
+| Input System | `input.gesture.longpress.unhandled` | Feedback | `LongPressUnhandledPayload(Vector2 ScreenPosition, float DurationMs, GameObject? Target)` | HUD (**REQUIRED MVP** — Pillar 5 fail-safe per input-system.md R3.c + AC-R3d-required) | T2 |
+| Input System | `input.contact.began` | Feedback | `ContactBeganPayload(Vector2 ScreenPosition, int FingerID, float BeganRealtimeSeconds)` | HUD (opt-in — Pillar 5 on-contact pending-state visual per input-system.md R3.e + AC-R3g pass-4), VFX/Juice (opt-in, VS) | T2 |
+| Input System | `audio.input.longpress.received` | Feedback | `LongPressUnhandledPayload` | HUD (routes to Audio Bus for playback; **REQUIRED MVP** audio half of dual-channel fail-safe per input-system.md R3.c + AC-R3d-audio pass-4 BLOCKING #11) | T2 |
 | Collection System | `audio.collect.coin.success` (+ gameplay channel) | Feedback + Gameplay | `CollectionSuccessPayload` | Audio Bus, VFX/Juice, HUD, Currency & Economy | T1 |
 | Collection System | `audio.collect.miss` | Feedback | `CollectionMissPayload(Vector2)` | Audio Bus, VFX/Juice | T1 |
 | Collection System | `gameplay.level.banked` | Gameplay | `BankedPayload(int TotalBanked)` | Currency & Economy, HUD, Save / Load | T2 |
@@ -306,16 +309,20 @@ Event Bus has no gameplay balance formulas. It has operational constants derived
 ### D.1 Dispatch Latency Budget (by tier)
 
 ```
-T1_latency_max = 16.67ms  (fixed wall-clock; NOT a per-frame fraction)
-T2_latency_max = 100ms    (Pillar 5 Feedback Floor)
+T1_latency_max            = 16.67ms   (per-channel wall-clock; NOT a per-frame fraction)
+T1_per_frame_aggregate_ms = 8ms       (per-frame sum across ALL T1 channels; new pass-4 cross-coordination constant)
+T2_latency_max            = 100ms     (Pillar 5 Feedback Floor)
 ```
 
 | Variable | Value | Source |
 |---|---|---|
-| T1_latency_max | 16.67ms | 60fps mid-tier target (`.claude/docs/technical-preferences.md`). **Fixed wall-clock**: at the 30fps floor on Mali-G52 (33.33ms frame budget), T1 remains 16.67ms. "Same frame" is a consequence of the wall-clock budget, not its definition. AC-F4 must include a 30fps test pass. |
-| T2_latency_max | 100ms | Pillar 5 "No Input Goes Silent" feedback floor |
+| T1_latency_max | 16.67ms | 60fps mid-tier target (`.claude/docs/technical-preferences.md`). **Fixed wall-clock per channel**: at the 30fps floor on Mali-G52 (33.33ms frame budget), T1 remains 16.67ms. "Same frame" is a consequence of the wall-clock budget, not its definition. AC-F4 must include a 30fps test pass. This is the *per-channel* window — each individual T1 channel's fire-to-last-subscriber must complete within it. |
+| **T1_per_frame_aggregate_ms** | **8ms** | **Per-frame sum of T1 dispatch time across ALL T1 channels combined (new pass-4 cross-coordination amendment per input-system.md review log 2026-04-22 pass-2 BLOCKING #4).** The per-channel `T1_latency_max` of 16.67ms gates each channel independently, but multiple T1 channels firing in a single frame (e.g. Input + Collection + Tool + Hazard + Critter AI all firing on the same Rush-phase frame) could collectively consume the entire 16.67ms budget and leave zero for render + physics + gameplay. This aggregate constrains the combined T1 cost across all channels per frame to 8ms (≈ 48% of the frame budget); the remaining ≥ 8.67ms is reserved for render (4–6ms on Mali-G52), physics (~2ms at 40 Rigidbody2D), and gameplay `Update` (~1ms). Producer systems that publish on T1 channels MUST declare their slice-of-aggregate in their own GDD's frame-budget section; known claims so far: **Input System = 4ms of 8ms (50%)** per input-system.md R13.c — the highest-frequency T1 producer because every Rush-phase frame is a potential touch frame. Remaining ≤ 4ms is shared among all other MVP T1 producers (Collection, Tool, Hazard, Critter AI, HUD-as-subscriber's T1 handler cost is counted in the publisher's chain). |
+| T2_latency_max | 100ms | Pillar 5 "No Input Goes Silent" feedback floor (per-channel). AC-P1 in Input System GDD amends this to a device-frame-rate-aware end-to-end clock (100ms @ 60fps / 133ms @ 30fps) — that AC measures end-to-end wall-clock including render-submission, distinct from this per-channel Event Bus budget. |
 
-Clarification added pass-1 per systems-designer finding #9.
+Clarification added pass-1 per systems-designer finding #9. Per-frame aggregate added pass-4 per input-system.md pass-2 BLOCKING #4 cross-coordination.
+
+**Aggregate enforcement (pass-4):** CI PlayMode test `AC-F4-aggregate` (added pass-4) instruments all T1 channel Fires per frame, sums their durations, and asserts `sum_T1_dispatch_ms ≤ 8ms` at 99th-percentile over a 1000-frame run on the ADR-003 reference device. Failures name each contributing channel's slice for attribution. This is the cross-channel gate that makes Input's 4ms sub-budget claim load-bearing — without it, Input's 4ms is vacuous against other T1 producers' uncoordinated frame-time consumption.
 
 ### D.2 Deferred Queue Capacity
 
@@ -552,6 +559,8 @@ Editor tooling is implemented alongside the Event Bus code and is scoped in Tech
 
   **Test-only accessor contract (pass-3):** `EventChannelSO<T>` exposes two `internal` members used only by tests: (a) `internal int SubscriberCapacity_TestOnly => _subscribers.Capacity;` and (b) `internal object SubscriberBackingArrayRef_TestOnly => <fieldref of List's backing array via a stable interface, not reflection>`. To avoid reflection into `List<T>._items` (a private BCL field that has been renamed across .NET versions and is fragile per qa-lead finding), the channel SO wraps its subscriber collection in a custom internal type `ChannelSubscriberList<T>` that exposes `BackingArrayRef` as a public-internal property. The test assembly has `[InternalsVisibleTo("EventBus.Tests")]` declared on the Event Bus assembly. Pass-1 revision: capacity 8→16 + reframed from post-add to constructor-time pre-allocation; pass-3: removed reflection fragility via explicit test-only accessors on an owned wrapper type. **BLOCKING CI (PLAYMODE)**
 - **AC-F4 — T1 Latency Budget (P95 ≤ 16.67ms, P99 ≤ 33ms on CI hardware)** — GIVEN all T1-tier pairs (Input→VFX/Juice, Input→HUD, Collection→Audio, Hazard→VFX) in a PlayMode test on the CI runner (specify: GitHub Actions `ubuntu-latest` or `macos-latest` with Unity 6.3 LTS headless), WHEN each pair fires 100 times with `System.Diagnostics.Stopwatch` wrapping `Fire<T>` call through all subscriber returns, THEN P95 round-trip ≤ 16.67ms AND P99 ≤ 33ms (one-frame tolerance at 30fps floor); any sample exceeding 33ms is logged as a warning; test fails only if P95 is breached. Mali-G52 device validation deferred to AC-F6b/c (MANUAL at VS milestone). Pass-1 revision: replaced "no outliers" (unverifiable) with P95/P99 definitions + hardware specification per qa-lead finding #7. **PLAYMODE**
+
+- **AC-F4-aggregate — Per-Frame T1 Aggregate Across All Channels (pass-4 cross-coordination per input-system.md pass-2 BLOCKING #4)** — GIVEN a PlayMode test scene wiring all MVP T1 producer→subscriber pairs (Input's three `input.*` channels + Collection's `audio.collect.*` + Tool's `audio.tool.consumable.deploy` + every other MVP T1 channel from the Interactions table) on the ADR-003 reference device (or CI runner surrogate at 60fps simulated), WHEN the scene runs for 1000 frames with synthetic fire-load driving each channel at its worst-case Rush-phase frequency, THEN the per-frame sum `Σ T1_dispatch_ms_per_frame` (summed across all T1 channels that fired in that frame) satisfies 99th-percentile `≤ 8.0 ms`; failures name each contributing channel's slice for attribution. Individual-channel failures (any single channel > 16.67ms) are separate failures handled by AC-F4; this AC specifically gates cross-channel aggregate consumption so that no combination of channels can collectively eat the frame. Input's declared 4ms slice (input-system.md R13.c) is load-bearing against this aggregate; if the aggregate breaches, producers must negotiate reduced slices via cross-GDD amendments. **BLOCKING CI (PLAYMODE)**
 - **AC-F4b — Feedback Group Latency + Onset-Spread (both must pass)** (pass-1; amended pass-3) — GIVEN a registered Feedback Group for `input.tap.main` = {VFX/Juice, Audio Bus, HUD, Haptics}, WHEN the event fires 100 times in a PlayMode test, THEN BOTH of the following hold across all samples (P95):
   - **(1) group_latency**: `max(subscriber.completion_timestamp) - fire_timestamp` ≤ 16.67ms for T1 groups / ≤ 100ms for T2 groups
   - **(2) intra_group_onset_spread**: `max(subscriber.handler_entry_timestamp) - min(subscriber.handler_entry_timestamp)` ≤ **22ms** for ALL tier groups (T1 and T2 share the same perceptual synchrony budget)
@@ -637,16 +646,16 @@ Pass-1 note: the AC-INT series below references "T1/T2 budget" — this is the C
 - **AC-STR1 / AC-STR2 — MERGED INTO AC-R3 (pass-1)** — prior AC-STR1 (Subscribe) and AC-STR2 (Fire) used defective regex patterns (greedy `.*`, unclosed capture group, CRLF handling). Unified into the revised AC-R3 which runs the fixed POSIX-compatible pattern across BOTH Subscribe and Fire call sites via a single `grep -rPn '\.(?:Subscribe|Fire)\s*<[^>]+>\s*\(\s*"'` check.
 - **AC-STR3 — Generated Constants Fresh + Compile After Taxonomy Change** — GIVEN a change to `AudioEventTaxonomy` or `VisualEventTaxonomy` SO, WHEN the PR is opened, THEN the `.github/workflows/eventbus-codegen-staleness.yml` job runs codegen in headless Unity and `git diff --exit-code`s the three generated files (`AudioEventIds.cs`, `VisualEventIds.cs`, `AnalyticsSubscribers.cs`); any drift fails CI. AND: the full project compiles with the regenerated files; any call-site reference to a removed channel produces a compile-time error (not a silent runtime mismatch). Pass-1 revision: switched mechanism from AssetPostprocessor-at-build-time (unreliable in headless CI per unity-specialist finding #5) to committed-generated-files + staleness-CI-check. **BLOCKING CI**
 
-### Gate Summary (recounted pass-3 — body-verified)
+### Gate Summary (recounted pass-3 — body-verified; pass-4 amendment adds AC-F4-aggregate)
 
 | Gate | Count | ACs |
 |---|---|---|
-| **BLOCKING CI** | 16 | AC-R1 (merged from R1+P1), AC-R2, AC-R2b, AC-R3, AC-R7, AC-R7a, AC-F2, AC-F3, AC-F4b (elevated pass-3), AC-F5 (elevated pass-3), AC-F6a, AC-BOOT-A (split pass-3), AC-EC1, AC-EC2, AC-REL (elevated pass-3), AC-STR3 |
+| **BLOCKING CI** | 17 | AC-R1 (merged from R1+P1), AC-R2, AC-R2b, AC-R3, AC-R7, AC-R7a, AC-F2, AC-F3, **AC-F4-aggregate (pass-4)**, AC-F4b (elevated pass-3), AC-F5 (elevated pass-3), AC-F6a, AC-BOOT-A (split pass-3), AC-EC1, AC-EC2, AC-REL (elevated pass-3), AC-STR3 |
 | **PLAYMODE (non-CI-blocking)** | 16 | AC-R4, AC-R5, AC-R6, AC-F4, AC-EC4, AC-EC5, AC-EC6, AC-EC7, AC-P3, AC-INT1, AC-INT2, AC-INT3, AC-INT4, AC-INT5, AC-INT6, AC-INT7 |
 | **ADVISORY** | 2 | AC-BOOT-B (split pass-3), AC-P2 |
 | **MANUAL (device capture at VS)** | 2 | AC-F6b (visual at Mali-G52, P95@N=20), AC-F6c (audio at Mali-G52, P95@N=20) |
 
-**Total: 36 AC identifiers** (16 BLOCKING CI + 16 PLAYMODE + 2 ADVISORY + 2 MANUAL = 36). Merged-but-retained-as-marker IDs (AC-F1, AC-P1, AC-EC3, AC-STR1, AC-STR2) are NOT counted — they remain in the document as pointers only.
+**Total: 37 AC identifiers** (17 BLOCKING CI + 16 PLAYMODE + 2 ADVISORY + 2 MANUAL = 37; pass-4 cross-coordination amendment added AC-F4-aggregate to BLOCKING CI per input-system.md pass-2 BLOCKING #4). Merged-but-retained-as-marker IDs (AC-F1, AC-P1, AC-EC3, AC-STR1, AC-STR2) are NOT counted — they remain in the document as pointers only.
 
 **Pass-3 body-consistency check:** each AC in the list above is individually cross-referenced to its definition in §H.1–§H.6. The pass-2 finding that the body count (20) did not match the claim (14) is resolved — pass-3 verifies by enumeration, not by section-level summation.
 

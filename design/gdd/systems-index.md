@@ -20,13 +20,13 @@ The decomposition produces **30 systems across 5 layers** (Foundation / Core / F
 
 | # | System Name | Category | Layer | Priority | Status | Design Doc | Depends On |
 |---|-------------|----------|-------|----------|--------|------------|------------|
-| 1 | Input System | Core | Foundation | MVP | Not Started | — | (none) |
+| 1 | Input System | Core | Foundation | MVP | **REVISED (pass-4)** 2026-04-23 — all 14 BLOCKING items from `/design-review` pass-4 resolved: (1–2) two self-inflicted pass-3 stale-text fragments (D.3 formula block + AC-D3-late-lift) fixed; (3) AC-R3d-required rewritten to behavioral fixture, removing `EventBus.DebugSubscriberCount` phantom-API dependency; (4) `MONEYMINER_RELEASE_GATE` CI injection mechanism named (`tools/ci/SetReleaseGate.cs` editor script + game-ci invocation); (5) `ProfilerRecorder` "no inline brackets" claim corrected — Release retains inline `ProfilerMarker.Begin/End` (lighter than Stopwatch); (6) H.4 preamble tier-split disclaimer added (Release/Dev separate captures); (7) AC-R13c correlated-tail routing clause; (8) D.1 half-and-half split clarified as design-intent (only joint sum BLOCKING); (9) AC-P1 INCONCLUSIVE CI reporter behavior specified (warning annotation, non-merge-blocking); (10) AC-P1 wall-clock rolling window ≥ 500 ms + 30 fps hysteresis band; (11) audio channel `audio.input.longpress.received` gets own AC-R3d-audio BLOCKING CI + Audio Bus dependency row + compliant 4-segment slug; (12) OQ-6 activation changed to non-impaired pattern (DEV_BUILD pause-menu button + 5-tap title logo); (13) `input.contact.began` T2 advisory IMPLEMENTED NOW via R3.e + AC-R3g (honours pass-1 CD adjudication condition — OQ-10 closed); (14) AC-P3 ceiling 5.0 ms non-provisional (Mali-G52 25% inflation derivation; OQ-8 downgraded to informational). AC count 68 → 70 (+AC-R3d-audio, +AC-R3g). Pending pass-5 adversarial re-review ([review log](reviews/input-system-review-log.md)). Event Bus GDD Interactions table updated with 2 new rows (contact.began + audio.input.longpress.received); Event Bus APPROVED status preserved (Interactions table additions are non-revisionary). | [design/gdd/input-system.md](input-system.md) | (none) |
 | 2 | Scene / App State Manager | Core | Foundation | MVP | Not Started | — | (none) |
 | 3 | Data Registry (inferred) | Core | Foundation | MVP | **Approved** (pass 4 targeted verification 2026-04-21 — see [review log](reviews/data-registry-review-log.md)) | [design/gdd/data-registry.md](data-registry.md) | (none) |
 | 4 | Save / Load (inferred) | Persistence | Foundation | MVP | **Approved** (pass 4 targeted verification 2026-04-21 — all 25 pass-1+pass-2 blockers verified resolved; Gate Summary reconciles to 60 ACs; 1 advisory nice-to-have; see [review log](reviews/save-load-review-log.md)) | [design/gdd/save-load.md](save-load.md) | Data Registry |
 | 5 | 2D Physics & Arc Trajectory | Gameplay | Foundation | MVP | Not Started | — | (none) |
 | 6 | Audio Bus (inferred) | Audio | Foundation | MVP | Not Started | — | (none) |
-| 7 | Event Bus (inferred, TD-added) | Core | Foundation | MVP | **Approved** (pass 3 revision accepted 2026-04-21 without further adversarial review, per CD pass-2 guidance — see [review log](reviews/event-bus-review-log.md)) | [design/gdd/event-bus.md](event-bus.md) | (none) |
+| 7 | Event Bus (inferred, TD-added) | Core | Foundation | MVP | **Approved** (pass-3 revision accepted 2026-04-21; + pass-4 cross-coordination amendment 2026-04-22 — `T1_per_frame_aggregate_ms = 8 ms` locked constant + AC-F4-aggregate added per input-system.md pass-2 BLOCKING #4; amendment is additive, APPROVED preserved — see [review log](reviews/event-bus-review-log.md)) | [design/gdd/event-bus.md](event-bus.md) | (none) |
 | 8 | Level Runtime | Gameplay | Core | MVP | Not Started | — | Scene Manager, Data Registry, Save/Load, Input, Audio, Event Bus |
 | 9 | Level Scoring (TD-split from Level Runtime) | Gameplay | Core | MVP | Not Started | — | Level Runtime, Data Registry, Event Bus |
 | 10 | Gopher Spawn & Launch | Gameplay | Core | MVP | Not Started | — | Data Registry, 2D Physics, Level Runtime, Event Bus |
@@ -251,10 +251,10 @@ Effort: S = 1 design session (~2-4 hours); M = 2-3 sessions; L = 4+ sessions.
 | Total systems identified | 31 |
 | Active (MVP/VS/v1.0) systems | 29 |
 | Post-launch (deferred) systems | 2 |
-| Design docs started | 3 |
-| Design docs reviewed | 3 (Data Registry — APPROVED pass 4; Event Bus — APPROVED after pass-3 revision accepted; Save/Load — APPROVED pass 4 targeted verification 2026-04-21) |
-| Design docs approved | 3 (Data Registry, Event Bus, Save/Load) |
-| MVP systems designed | 3 / 20 (Data Registry + Event Bus + Save/Load approved) |
+| Design docs started | 4 |
+| Design docs reviewed | 4 (Data Registry — APPROVED pass 4; Event Bus — APPROVED after pass-3 revision + pass-4 cross-coordination amendment 2026-04-22 + pass-4 Input-coordination Interactions-table additions 2026-04-23 — APPROVED preserved; Save/Load — APPROVED pass 4 targeted verification 2026-04-21; Input System — REVISED pass-4 2026-04-23, 14 BLOCKING items resolved including input.contact.began implemented + AC-R3d-audio added, pending pass-5 re-review) |
+| Design docs approved | 3 (Data Registry, Event Bus, Save/Load) — Input System REVISED pass-4, pending pass-5 adversarial re-review in fresh session |
+| MVP systems designed | 4 / 20 (Data Registry + Event Bus + Save/Load approved; Input System REVISED pass-4 — all 14 pass-4 BLOCKING items resolved including Pillar 5 contact-silence gap closure via R3.e; awaiting adversarial re-validation as pass-5 review) |
 | Vertical Slice systems designed | 0 / 5 (plus 2 MVP-minimal scope expansions) |
 | Shippable v1.0 systems designed | 0 / 4 |
 

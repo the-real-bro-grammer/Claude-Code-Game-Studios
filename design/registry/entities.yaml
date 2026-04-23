@@ -37,7 +37,7 @@
 #   Each entry: name, status, source, referenced_by[], attributes{}, added, revised
 
 version: 1
-last_updated: 2026-04-21  # Save/Load pass-3 OQ-4 closed + pass-4 APPROVED; consistency-check repaired Event Bus subscriber rows 280/288 and updated gameplay_channel_regex notes
+last_updated: 2026-04-23  # /consistency-check after Input pass-4 revision: added T1_per_frame_aggregate_ms constant (stale since Event Bus 2026-04-22 pass-4 cross-coordination amendment)
 
 # ─── ENTITIES ────────────────────────────────────────────────────────────────
 # Named game-world objects: enemies, NPCs, characters, factions, bosses.
@@ -190,11 +190,12 @@ constants:
     referenced_by:
       - design/gdd/event-bus.md
       - design/gdd/save-load.md
+      - design/gdd/input-system.md
     value: 16.67
     unit: milliseconds
-    notes: "Hard latency ceiling for T1-tier events (same-frame response). Derived from 60fps frame budget. Enforces Pillar 5 ('No Input Goes Silent') on input response, collection, slapstick hazards. AC-F4 + AC-P3 in Event Bus GDD; AC-F6 extends to end-to-end input→render. Save/Load explicitly opts OUT of T1 participation — async flushes run after feedback fires, not before."
+    notes: "Hard latency ceiling for T1-tier events (same-frame response). Derived from 60fps frame budget. Enforces Pillar 5 ('No Input Goes Silent') on input response, collection, slapstick hazards. AC-F4 + AC-P3 in Event Bus GDD; AC-F6 extends to end-to-end input→render. Save/Load explicitly opts OUT of T1 participation — async flushes run after feedback fires, not before. Input System D.1 InputPipelineBudget formula derives BudgetCeiling_ms directly from this constant (Release profile); AC-R13c + AC-D1-release are the BLOCKING CI gates that enforce it on Input's dispatch pipeline."
     added: 2026-04-20
-    revised: ""
+    revised: 2026-04-22  # Added design/gdd/input-system.md to referenced_by per D.1 derivation
 
   - name: t2_latency_max
     status: active
@@ -202,11 +203,12 @@ constants:
     referenced_by:
       - design/gdd/event-bus.md
       - design/gdd/save-load.md
+      - design/gdd/input-system.md
     value: 100
     unit: milliseconds
-    notes: "Feedback Floor budget (Pillar 5 contract). Applies to T2-tier events (state changes, economy updates, AI signals) AND to end-to-end input→render contract via AC-F6. VFX/Juice, HUD, Collection, Tool, Hazard, Critter AI GDDs must honor this. Save/Load explicitly opts OUT — save writes are a consequence of an input, not the input itself, and do not participate in the Feedback Floor."
+    notes: "Feedback Floor budget (Pillar 5 contract). Applies to T2-tier events (state changes, economy updates, AI signals) AND to end-to-end input→render contract via AC-F6. VFX/Juice, HUD, Collection, Tool, Hazard, Critter AI GDDs must honor this. Save/Load explicitly opts OUT — save writes are a consequence of an input, not the input itself, and do not participate in the Feedback Floor. Input System is the primary contributor to this budget via AC-P1 (end-to-end Feedback Floor gate on ADR-003 reference device): Input commits ≤ 16.67 ms of the 100 ms, leaving ≥ 83.33 ms for VFX/Juice, HUD, and render."
     added: 2026-04-20
-    revised: ""
+    revised: 2026-04-22  # Added design/gdd/input-system.md to referenced_by per AC-P1 end-to-end Feedback Floor assertion
 
   - name: feedback_channel_regex
     status: active
@@ -231,6 +233,29 @@ constants:
     notes: "Format regex for Gameplay-namespace event IDs (internal events: phase_changed, quota_progress, banked, gopher.launched, etc.). Event Bus R5 enforces namespace distinction from Feedback. Save/Load subscribes to gameplay.* channels as write triggers; the 7 additional gameplay.* events from save-load.md OQ-4 (currency.changed, tool.purchased, tool.upgraded, cosmetic.purchased, progression.node_unlocked, biome.unlocked, session.level_selected) were patched into Event Bus's Section C Interactions table on 2026-04-21 during Save/Load pass-3 revision. Save/Load is also a subscriber on the pre-existing gameplay.level.banked and gameplay.level.complete/failed rows (corrected 2026-04-21 via /consistency-check)."
     added: 2026-04-20
     revised: 2026-04-21  # consistency-check: updated notes to reflect OQ-4 closure + Event Bus subscriber-row repair (rows 280/288)
+
+  - name: DeviceDisplayMetrics
+    status: active
+    source: design/gdd/input-system.md
+    referenced_by:
+      - design/gdd/input-system.md
+    value: struct
+    unit: interface
+    notes: "Read-only platform-abstraction struct owned by Input System (R6.a). Fields: pixels_per_point (iOS), pixels_per_dp (Android), safe_area_rect, screen_aspect_ratio. Populated in InputDispatcher.Initialize() from Unity's Screen.dpi / Screen.safeArea before any touch event fires. Cross-system contract — every consuming system (HUD, Tool System, Collection System, Biome Map, Modal/Dialog, VFX/Juice) reads this struct instead of using #ifdef UNITY_IOS / UNITY_ANDROID branches for platform-specific sizing. R6.a + AC-P4 (Aspect-Ratio Safe-Area Coverage) enforce that queried values differ between 19.5:9 and 21:9 configurations (platform-correct insets, not a constant stub). Consumers that query before Initialize() completes trigger InvalidOperationException per EC-CFG / AC-EC-CFG (Script Execution Order violation). Any downstream GDD that reads platform dimensions (Tool System drag-placement, HUD safe-area layout, Biome Map pan bounds) must reference this struct rather than re-querying Unity APIs directly."
+    added: 2026-04-22
+    revised: ""
+
+  - name: T1_per_frame_aggregate_ms
+    status: active
+    source: design/gdd/event-bus.md
+    referenced_by:
+      - design/gdd/event-bus.md
+      - design/gdd/input-system.md
+    value: 8
+    unit: milliseconds
+    notes: "Locked per-frame aggregate ceiling for the SUM of T1 latencies across ALL Event Bus T1 channels combined (distinct from t1_latency_max = 16.67 ms, which is per-channel). Added 2026-04-22 in Event Bus pass-4 cross-coordination amendment per Input System pass-2 BLOCKING #4. Enforced by Event Bus AC-F4-aggregate (BLOCKING CI PlayMode): per-frame sum across all T1 channels ≤ 8 ms at 99p over 1000-frame run; failures attribute cost per channel. Rationale: 16.67 ms frame − 8 ms aggregate T1 ≥ 8.67 ms remaining for render / physics / gameplay / non-T1 work. Input System claims 4 ms (50 %) of this aggregate via R13.c main-thread sub-budget + AC-R13c BLOCKING CI; remaining ≤ 4 ms is shared across all other MVP T1 producers (Collection, Tool, Hazard, Critter AI — each to receive approximately 1 ms per system, tight and unverified at system-design time). Input GDD R13.b cites this constant explicitly as cross-GDD aggregate coordination. Registered via /consistency-check 2026-04-23 after Input pass-4 revision (stale entry — the constant existed in two GDDs since 2026-04-22 Event Bus amendment but was never added to registry)."
+    added: 2026-04-23
+    revised: ""
 
 # Example:
 #

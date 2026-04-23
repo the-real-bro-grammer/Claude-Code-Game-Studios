@@ -178,9 +178,9 @@ Every level has a calm planning beat AND a reactive chaos beat. Never a pure puz
 
 ### Pillar 5: No Input Goes Silent
 
-Every input gets audiovisual feedback within 100ms — but when juice obscures board state, readability wins.
+Every input gets audiovisual feedback within the Feedback Floor — **100 ms at the 60 fps target / 133 ms at the 30 fps floor** (device-frame-rate-aware per `input-system.md` AC-P1; linear interpolation between). Sustained `fps < 30` is a thermal emergency outside this contract. When juice obscures board state, readability wins.
 
-*Design test*: If feedback and legibility conflict, trim the feedback before sacrificing either.
+*Design test*: If feedback and legibility conflict, trim the feedback before sacrificing either. If the 60 fps target cannot be held under thermal load on the reference device class (Mali-G52), the 30 fps floor is the documented degradation path — not a waiver.
 
 ### Anti-Pillars (What This Game Is NOT)
 
