@@ -1,137 +1,223 @@
 # Active Session State
 
-*Last Updated: 2026-04-21 (Input System GDD Sections A–E written in this session; user elected to break to fresh session for F/G/H per skill ≥70% context flag)*
+*Last Updated: 2026-04-24 (**Scene / App State Manager pass-1 APPROVED via /design-system** — Foundation #5 GDD fully authored, CD-GDD-ALIGN APPROVE-WITH-CONDITIONS → APPROVED on condition application. 651 lines, 37 ACs across 5 gate tiers (10 BLOCKING CI + 8 BLOCKING CI PLAYMODE + 16 PLAYMODE/Integration + 2 EDITMODE + 2 DEVICE blocked on ADR-003 + 3 ADVISORY), 14 Core Rules + 5 Formulas + 18 Edge Cases + 15 Open Questions. Conditions 1+2 applied inline (Status header "Implements Pillar 2" → "Protects Pillar 2"; AC-INT-FF Feedback Floor scene-boundary handoff added). Condition 3 (ADR-008 gating dependency) logged as pre-implementation requirement in Next Tasks below. 3 new Event Bus channels registered (`gameplay.scene.will_unload`, `gameplay.scene.load_ready`, `gameplay.app.state_changed`); 3 existing registry entries `referenced_by` updated (`t2_latency_max`, `DeviceDisplayMetrics`, `gameplay_channel_regex`). 4 bidirectional-consistency amendments flagged for Input System / Event Bus / Save/Load / Data Registry (additive, non-breaking). ADR-008 (Scene Loading Strategy) + ADR-009 (Bootstrap Architecture) triggered for pre-production; ADR-003 (shared named reference device) still pending. 5 of 20 MVP GDDs now fully approved.)*
 
 ## Current Phase
 
-**Systems Design** — 3 of 20 MVP GDDs APPROVED (Data Registry + Event Bus + Save/Load). Input System (Foundation #4) in progress at `design/gdd/input-system.md`; Sections A–E written, F/G/H + optional + Phase 5 remaining. Resume in fresh session via `/design-system input-system` — skill detects written sections and picks up at F.
+**Systems Design** — **5 of 20 MVP GDDs fully APPROVED**. Status: Data Registry + Event Bus + Save/Load + Input System + **Scene / App State Manager APPROVED pass-1 post-CD-GDD-ALIGN** (2026-04-24). Next action: **`/consistency-check design/gdd/scene-app-state-manager.md`** per CD Condition 3 recommendation (verifies named cross-GDD contracts — Event Bus channels, Save/Load priorities, Input teardown ordering, Data Registry terminal — match current state of those GDDs), then **`/design-review design/gdd/scene-app-state-manager.md` in a fresh session** for full adversarial panel verification (first system in project to introduce Fast Enter Play Mode Reset() pattern — unity-specialist review especially load-bearing).
 
-## Resume Handoff for Next Session
+### Phase 6B aggregate findings (3 specialists, parallel spawn, 2026-04-24)
 
-**File to resume**: `design/gdd/input-system.md`
+**unity-specialist** — CONCERNS. 1 BLOCKING implementation defect + 3 recommended corrections.
+- **BLOCKING**: `CopyTo(ProfilerRecorderSample[], int)` overload in AC-R13f spec — signature likely non-existent in Unity 6.3 LTS `ProfilerRecorder` API. Must become `CopyTo(List<ProfilerRecorderSample>)` or `CopyTo(NativeArray<ProfilerRecorderSample>)`.
+- RECOMMENDED: add `using Unity.Profiling;` namespace note to AC-R13f; soften B8 ARM "10-15% field measurement" language to "engineering estimate pending OQ-8"; correct B10 prose "Library/ + ProjectSettings/" → "ProjectSettings/ (the define persists in ProjectSettings.asset written by AssetDatabase.SaveAssets())".
+- Adjudicated Phase 6A CORRECT on `SetScriptingDefineSymbols` overloads — pass-5 unity-specialist claim that `(NamedBuildTarget, string[])` doesn't exist was WRONG; both overloads exist in Unity 6.3.
+- Package pins: `inputsystem@1.11.x` PASS (engine-reference supports); `ugui@2.0.x` CONCERNS (UPM package vs built-in-module ambiguity, correctly flagged UNVERIFIED).
 
-**Sections complete (do not rewrite):**
-- **A. Summary + Overview** — data/infrastructure framing; no ADR ref; no standalone fantasy. 5 rules summarized: no direct UnityEngine.InputSystem outside Input, no input during LoadingFromDisk, no tap synthesis from drag, no main-thread blocking, no gameplay rules in Input.
-- **B. Player Fantasy** — hybrid A+B+A framing from creative-director (pure infrastructure + Rush-phase ramp-drag anchor + "silence when working, invisible when working" closer).
-- **C. Detailed Design** — 13 numbered rules (R1–R13) + 6-state state machine (Uninitialized / Active / Suppressed.PhaseTransition / Suppressed.Modal / Suppressed.Loading / Disposed) + Interactions table (upstream: Event Bus, Save/Load, Modal/Dialog, Scene Manager; downstream: VFX, Haptics, HUD, Tool, Collection, Biome Map, Main Menu, Modal/Dialog). 2 user design decisions baked in: (1) hitbox inflation is CONSUMER-AUTHORED not Input-registry, (2) `input.drag.update` event DOES NOT EXIST (continuous drag state via `InputState.CurrentPointer` polling only).
-- **D. Formulas** — D.1 InputPipelineBudget (PreFire ≤ 8ms + T1Chain ≤ 8ms = Total ≤ 16.67ms Release / ≤ 20ms Dev), D.3 GestureClassification (piecewise on d, t, ended, v → {InProgress, Tap, Drag, LongPress}). Occlusion offset 72dp, edge padding 8dp, subscriber cap 8, per-handler threshold 2ms, PhaseTransitionSuppressDuration — all moved to Section G.
-- **E. Edge Cases** — 12 entries in 5 categories (OS/Platform 4, State Machine/Lifecycle 4, Classifier Boundary 3, Hit-Test Resolution 4, Configuration/Tuning Extremes 1).
+**performance-analyst** — REJECT. 2 BLOCKING domain errors + 3 concerns.
+- **BLOCKING**: AC-R13c specifies `temperature_c: float` in thermal-state triple, cites `PowerManager.ThermalStatus` — but that Android API (API 29+) returns discrete severity enum (0–6), not Celsius. Same class of domain error as pass-4's GPU→CPU figure. Fix: replace with `thermal_severity_level: int`.
+- **BLOCKING**: iOS `ProcessInfo.thermalState` requires native iOS plugin (Foundation Obj-C API, not accessible from managed C#) — undisclosed Plumbing Sprint dependency not in Section F table/ADR list.
+- CONCERNS: `v_lateLift` range device-DPI-dependent but presented device-independent (no DPI conversion disclosure — 0.1 pt/ms = 15.9 mm/s at 320 dpi Android); `v_lateLift` safe-range floor 0.05 not enforced by OnValidate; `0.1 ms residual` noise budget contradicts pass-3's own 0.4-0.6 ms Stopwatch empirical finding (environmental noise unchanged by instrumentation).
+- Budget arithmetic (AC-P3 = 4.6 ms thermal ceiling via 4.0 × 1.15) coherent IF residual noise is really 0.1 ms — but B9 finding invalidates that assumption. Dev-vs-Release cross-tier flaky-CI risk for handlers in 0.8–1.0 ms range.
 
-**Sections remaining:**
-- **F. Dependencies** — mostly already captured in C's Interactions table; consolidate upstream/downstream with Priority + Nature columns per Save/Load template; note zero upstream gameplay deps; note Scene Manager (undesigned), Save/Load (approved), Event Bus (approved), Modal/Dialog (undesigned) relationships.
-- **G. Tuning Knobs** — consolidate all named constants from C + D tuning suggestions. Must include: `d_slop` (10pt, 10–20), `d_early` (6pt, 6–d_slop) with tuning hazard note about `d_early = d_slop - 1`, `t_tap_max` (300ms, 300–600), `t_early` (150ms, 100–200), `v_lateLift` (0.02 pt/ms), `occlusion_offset_dp` (72, 56–96), `edge_padding_dp` (8, 4–16), `PhaseTransitionSuppressDuration_ms` (TBD propose 150), `SubscriberCountMax` (8, locked), `PerHandlerCostThreshold_ms` (2, advisory), CI severity for R1 grep / R12 gameplay-namespace grep. Tuning Knob interactions section covering coupled knobs (d_slop with d_early invariant).
-- **H. Acceptance Criteria** — **MANDATORY qa-lead spawn per skill**. Target: ~30–40 ACs across Rule Compliance / Formula Correctness / Edge Cases / Performance / Consumer Integration / Invariants categories, matching Save/Load's H.1–H.7 structure. Gate Summary breakdown (BLOCKING CI / PLAYMODE / DEVICE / ADVISORY).
-- **Visual/Audio Requirements** — Input has zero visual/audio per R8; short note "Not applicable; all feedback is subscriber-owned" suffices.
-- **UI Requirements** — Input has no player-facing UI; Editor debug window for touch event history + suppression state inspection (dev tooling, not GDD-scope).
-- **Open Questions** — carry forward from session: OQ-1 frame-drop late-lift taps lost to classifier, OQ-2 VS Accessibility UI copy for t_tap_max=600ms UX discontinuity, OQ-3 Android foldable safe-area post-launch, OQ-4 `gameplay.level.phase_changed` payload shape needs Level Runtime GDD confirmation.
+**accessibility-specialist NEW (first consultation across all 6 passes)** — CONCERNS. 3 BLOCKING/HIGH items + 3 advisory + 1 recommendation. **6 pass-1-through-5 oversights flagged.**
+- **BLOCKING (citation error)**: B16 cites "48 dp per WCAG 2.1 SC 2.5.5" — SC 2.5.5 is AAA, not AA. Governing AA criterion is WCAG 2.2 SC 2.5.8 (24×24). Fix: re-cite correctly.
+- **BLOCKING (self-contradiction)**: OQ-12 claims Section F phased table updated to REQUIRED-at-VS for `input.gesture.longpress.unhandled` Haptics subscription — Section F (GDD line ~153) still shows only `input.tap.main` with NO REQUIRED marker + NO longpress row. Normative section contradicts OQ claim. Fix: add second Haptics row.
+- **HIGH (timing contradiction)**: AC-EC-CB3 is MVP MANUAL but OQ-2 (copy-authoring task) is VS-scoped. If AC tests at MVP, copy must exist at MVP. Fix in one direction.
+- Advisory OQs to add: (a) mid-session accessibility settings access gap — production players mid-session have NO path (only `DEVELOPMENT_BUILD`-gated pause button); (b) minimum Android API floor for VibrationEffect (API 26+) unspecified — if Android min-target < 26, haptic third channel silently fails on low-end Android = SC 1.3.3 (A) violation re-opening deaf-blind gap.
+- RECOMMENDATION (non-blocking): promote `hit_target_scale` to MVP as `PlayerPrefs` key (UI slider can defer to VS), since fixed 1.4× is design assumption not user accommodation. Users with tremor/CP/fine-motor may need 1.6-2.0×.
+- EAA Annex I scope: mobile games are AMBIGUOUS / likely OUT for pure entertainment but IN via IAP checkout flow (Annex I Section IV e-commerce). GDD's blanket "EAA applies to mobile apps" overstates — applies to IAP-specific surfaces.
+- EN 301 549 → WCAG 2.1 AA correct (harmonized); WCAG 2.2 AA stronger but not yet mandated for 2026.
 
-**Phase 5 tasks after H is written:**
-- Phase 5a: **CD-GDD-ALIGN gate** — spawn creative-director in `full` mode (review-mode.txt confirmed `full`). Pass completed GDD + game pillars + MDA aesthetics.
-- Phase 5b: **Update `design/registry/entities.yaml`** — (1) add `input-system.md` to `t1_latency_max.referenced_by` (D.1 references it); (2) add `DeviceDisplayMetrics` as new constants-group entry or new entity sourcing from `input-system.md`; (3) bump `last_updated`.
-- Phase 5c: Offer `/design-review design/gdd/input-system.md` in fresh session.
-- Phase 5d: Update `design/gdd/systems-index.md` row 1 — Status → Designed (pending review).
+## Input System GDD — REVISED (pass-5 Phase 6A), Phase 6B pending
 
-**Specialists consulted this session (for audit trail in review log):**
-- systems-designer (2× — Section C R1–R13 base + Section D formula proposal + Section E gap-check)
-- ux-designer (Section C U1–U8 thresholds)
-- unity-specialist (Section C pattern recommendation: EnhancedTouch polling; NOT Input Actions asset; NEVER PlayerInput)
-- gameplay-programmer (Section C critical risk surface: R11 pause gesture cancellation show-stopper + R13 pipeline budget split)
-- creative-director (Section B fantasy framings: A/B/C/hybrid)
+**File**: `design/gdd/input-system.md` (~900 lines post Phase 6A; 71 ACs: 10 BLOCKING CI + 51 PLAYMODE + 1 EDITMODE + 4 DEVICE + 5 ADVISORY — body-verified count updated pass-5 Phase 6A per BLOCKING #3 reconciliation).
+**Status header**: REVISED (pass-5 Phase 6A) 2026-04-24.
+**Cross-document edits**: `game-concept.md` Pillar 5 text unchanged from pass-3 sync ("100 ms at 60 fps target / 133 ms at 30 fps floor"). `design/gdd/systems-index.md` Input row updated to REVISED (pass-5 Phase 6A); Progress Tracker summary updated.
+**Review log**: `design/gdd/reviews/input-system-review-log.md` — Phase 6A revision entry appended with per-BLOCKING-item resolution (B1–B18), user design decisions captured, Phase 6B + 6C spawn instructions.
+**CD-GDD-ALIGN trajectory**: pass-1 APPROVED → pass-2 CONCERNS → pass-3 CONCERNS → pass-4 CONCERNS → pass-5 REJECT → **pass-5 Phase 6A REVISED** (2026-04-24) pending Phase 6B/6C restoration.
 
-**Key decisions this session (for review log):**
-- D1: Framing = data/infrastructure, no ADR ref, no standalone fantasy
-- D2: Hitbox inflation = consumer-authored (rejected ux-designer's Input-registry proposal)
-- D3: No `input.drag.update` event (continuous state via polling only; keeps Event Bus traffic bounded)
-- D4: Systems-designer's Section D proposal accepted as-is (2 formulas, moved candidates D.2/D.4 to Section G)
+### User design decisions captured this session (multi-tab widget, all recommended options)
 
-## Session-End Protocol Slip (minor)
+- **B1 — `input.contact.began` HUD subscriber promotion**: **Rush-phase REQUIRED** (not all-scenes-REQUIRED, not keep-advisory). Added AC-R3g-required BLOCKING CI; HUD REQUIRED on Rush-phase-capable scenes (scenes spawning `LevelRuntime`).
+- **B16 — Accessibility activation path**: **Persistent "Accessibility" button on title screen** (single-tap, 48 dp, 3:1 contrast per WCAG 2.1 SC 1.4.11/2.5.5). Rapid 5-tap path REPEALED per pass-5 BLOCKING #16. Main Menu GDD owns button visual spec.
+- **B18 — Haptic third channel**: **Document gap in OQ-12, haptic at VS REQUIRED** (cert-gating). Haptics elevated from opt-in VS to REQUIRED VS on `input.gesture.longpress.unhandled` third-channel tick; closes deaf-blind gap at VS.
+- **B7 — `v_lateLift` default**: **0.1 pt/ms + OQ-11 empirical calibration**. Above 0.05 floor of specialist-cited 0.05–0.8 pt/ms motor-impaired range; below upper end. Safe range updated `[0.01, 0.1]` → `[0.05, 0.5]`.
 
-Section E was written without the mandatory `AskUserQuestion` approval widget between draft and Edit. User accepted as-written in the break-session widget. Note for future sessions: respect the Question→Draft→Approval→Write cycle strictly.
+### 18 BLOCKING items — Phase 6A resolution summary
+
+All 18 resolved author-led with citations; detail in review log 2026-04-24 Phase 6A entry.
+
+**Pillar 5 contract cluster (B1–B3)**: R3.e REQUIRED on Rush-phase scenes (B1, new AC-R3g-required); R3.c language "guaranteed non-visual fail-safe" → "publish-path fail-safe" (B2); Gate Summary arithmetic reconciled to 71 (B3).
+
+**Formula / budget structural cluster (B4–B7)**: D.3 explicit top-to-bottom priority + `InProgress otherwise` catch-all (B4); H.4 cross-tier amnesty closed via B11 thermal-state discriminator (B5); OQ-13 Rush-peak T1 aggregate empirical validation (B6); `v_lateLift` 0.02 → 0.1 pt/ms + OQ-11 (B7).
+
+**Unity 6.3 reality-alignment cluster (B8–B11)**: AC-P3 ceiling 5.0 → 4.6 ms CPU-domain re-derivation (B8, Cortex-A53/A55 10–15% citation); ProfilerMarker noise-floor correction + `ProfilerCategory.Scripts` + `capacity: 1000` (B9, Unity 6.2 docs cited); CI injection rewrite with separate `unity-builder@v4` step + read-modify-write `SetScriptingDefineSymbols(NamedBuildTarget, string)` pattern (B10); AC-R13c thermal-state annotation + 3-precondition downgrade gate (B11).
+
+**CI operability / AC hygiene cluster (B12–B15)**: CI Gate Operability Status column added (B12); AC-R3d-required phantom-type cleanup + AC-R3d-audio-xref new ADVISORY + AC-INT3/INT5 divergence disclosure (B13); AC-D3-margin-validate 6-step mechanism spec (B14, `SerializedObject` + `AssetDatabase.SaveAssets` + `LogAssert.Expect`); AC-INV5 tautology demoted to ADVISORY dashboard rollup (B15).
+
+**Accessibility / regulatory cluster (B16–B18)**: Rapid 5-tap REPEALED + persistent title-screen button (B16); OQ-6 VS-sprint-gating + accessibility-specialist REQUIRED reviewer + EAA/UK-Equality-Act citations (B17); OQ-12 deaf-blind gap + Haptics REQUIRED at VS cert-gating (B18).
+
+### Citations used in Phase 6A
+
+- [Unity Scripting API `PlayerSettings.SetScriptingDefineSymbols`](https://docs.unity3d.com/ScriptReference/PlayerSettings.SetScriptingDefineSymbols.html)
+- [Unity Manual Custom scripting symbols (6.3)](https://docs.unity3d.com/6000.3/Documentation/Manual/custom-scripting-symbols.html)
+- [Unity Scripting API `ProfilerRecorder.StartNew`](https://docs.unity3d.com/6000.2/Documentation/ScriptReference/Unity.Profiling.ProfilerRecorder.StartNew.html)
+- [Unity Manual Read frame timing data with ProfilerRecorder](https://docs.unity3d.com/6000.2/Documentation/Manual/frame-timing-manager-record-timing-data.html)
+- [Unity Manual Visualizing profiler counters](https://docs.unity3d.com/6000.2/Documentation/Manual/profiler-creating-custom-counters.html)
+- [game-ci/unity-test-runner docs](https://game.ci/docs/github/test-runner/)
+- [ARM Cortex-A55 sustained-performance blog](https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-cortex-a55-efficient-performance-from-edge-to-cloud)
+- [WCAG 2.1 SC 1.4.11 Non-text Contrast (W3C)](https://www.w3.org/WAI/WCAG21/Understanding/non-text-contrast.html)
+- [EAA June 28 2025 effective date (accessible-eu-centre.ec.europa.eu)](https://accessible-eu-centre.ec.europa.eu/content-corner/news/eaa-comes-effect-june-2025-are-you-ready-2025-01-31_en)
+- [UK Gov accessibility + Equality Act guidance](https://www.gov.uk/guidance/meet-the-requirements-of-equality-and-accessibility-regulations)
+- Touchscreen motor-impairment kinematic-theory research (CHI Conference, Wobbrock lab) — for `v_lateLift` 0.05–0.8 pt/ms range
+
+## Next session: Phase 6B (parallel specialist re-spawn) + Phase 6C (CD synthesis)
+
+### Phase 6B — Focused specialist re-spawn (parallel, <1 hour)
+
+Spawn THREE specialists via PARALLEL `Task` calls (single message, multiple tool uses):
+
+1. **`unity-specialist`** — verify B8 + B9 + B10 against Unity 6.3 LTS reference docs (`docs/engine-reference/unity/modules/input.md`, `physics.md`, `ui.md`). Also verify Unity 6.3 LTS `com.unity.inputsystem@1.11.x` + `com.unity.ugui@2.0.x` package pins.
+2. **`performance-analyst`** — verify B7 + B11 thermal + CI-infra fixes + B9 noise-floor arithmetic correction.
+3. **`accessibility-specialist`** (**NEW — never previously consulted on this GDD**) — review B16 + B17 + B18 + OQ-6 + R9 + R17 in-menu 600 ms warning copy + R19 `hit_target_scale` 4th accommodation dimension.
+
+**Do NOT re-spawn** game-designer/systems-designer/qa-lead/ux-designer unless Phase 6B output surfaces design-layer changes.
+
+### Phase 6C — CD synthesis + pass-6 verdict
+
+After Phase 6B returns, spawn `creative-director` with all three specialist findings + the pass-5 Phase 6A revision diff (appended to review log). CD renders pass-6 verdict. Target: **APPROVED** + CD-GDD-ALIGN **restored from REJECT to APPROVED**.
+
+## CD-GDD-ALIGN trajectory
+
+pass-1 APPROVED → pass-2 CONCERNS → pass-3 CONCERNS → pass-4 CONCERNS → pass-5 REJECT → **pass-5 Phase 6A REVISED** → Phase 6B + 6C pending. Document is architecturally sound; Phase 6A addressed the implementation-contract layer REJECT was on; Phase 6B + 6C verify the citations land and restore APPROVED.
 
 <!-- STATUS -->
 Epic: Systems Design
-Feature: Input System GDD
-Task: Input System GDD paused at end of session for fresh-session handoff. Sections A–E WRITTEN + accepted (Overview, Player Fantasy, Detailed Design 13 rules + state table + interactions, Formulas D.1/D.3, Edge Cases 12 entries × 5 categories). Resume with `/design-system input-system` in fresh session — the skill's Phase 4 detects sections with content and resumes at F. See "Resume Handoff for Next Session" section above for the complete remaining-work checklist, open questions to carry forward, registry updates, and Phase 5 tasks. 5 specialists consulted (systems-designer 2×, ux-designer, unity-specialist, gameplay-programmer, creative-director); 4 key design decisions baked in.
+Feature: Scene / App State Manager GDD — APPROVED pass-1 post-CD-GDD-ALIGN + /consistency-check PASS (2026-04-24)
+Task: **`/consistency-check` COMPLETE** (PASS). 6 of 12 registry entries Scene-Manager-relevant; all values agree across docs (`t2_latency_max=100ms` 3-doc match; `DeviceDisplayMetrics` consistent with Input R6.a; `gameplay_channel_regex` regex-compliance verified for 3 new channels). AC-INT-FF cross-reference to Input AC-P1 validated. ⚠️ Pending bidirectional amendments to Event Bus / Save/Load / Input / Data Registry tracked as Phase 5 work items (intentional deferral, not a conflict). No 🔴 CONFLICTS → no `docs/consistency-failures.md` append. **Next: `/design-review design/gdd/scene-app-state-manager.md` in a fresh session**, then apply 4 bidirectional amendments, then `/design-system audio-bus` (Foundation #6).
 <!-- /STATUS -->
 
-## Completed This Session
+## Completed This Session (2026-04-24 /design-system scene-app-state-manager)
 
-- [x] `/start` — onboarding, review mode set to `full`
-- [x] `/brainstorm` — game concept authored (`design/gdd/game-concept.md`)
-  - CD-PILLARS: CONCERNS → APPLIED (Pillar 1 + Pillar 5 revisions)
-  - AD-CONCEPT-VISUAL: APPROVE (Direction B — Cartoon Heist Diorama)
-  - TD-FEASIBILITY: CONCERNS → APPLIED (4 pre-production action items logged)
-  - PR-SCOPE: CONCERNS → APPLIED (re-baselined 9 months; soft cuts pre-committed)
-- [x] `/setup-engine` — Unity 6.3 LTS + C# + URP 2D Renderer configured
-  - CLAUDE.md updated; `.claude/docs/technical-preferences.md` populated
-  - 5 Unity specialist agents given Version Awareness sections
-  - Unity reference docs verified at `docs/engine-reference/unity/`
-- [x] `/art-bible` — art bible authored (`design/art/art-bible.md`, 9 sections)
-  - AD-ART-BIBLE: CONCERNS → APPROVED (5 clarification items resolved)
-- [x] `/map-systems` — systems index authored (`design/gdd/systems-index.md`, 31 systems)
-  - Enumeration: APPROVED
-  - TD-SYSTEM-BOUNDARY: CONCERNS → APPLIED (4 splits + Event Bus)
-  - PR-SCOPE: CONCERNS → APPLIED (3 MVP→VS slips, 2 MVP scope trims, cat theft deferred)
-  - CD-SYSTEMS: CONCERNS → APPLIED (Feedback Floor contract, Pillar 3 VS-gate, multi-hole confirmed, playtest logger)
+- [x] **Phase 2 — Context gathering + Feasibility Brief**: Read game-concept.md, systems-index.md, entities.yaml (9 registry entries), all 4 approved Foundation GDDs (Data Registry, Event Bus, Save/Load, Input System) with targeted Grep for scene-related references. Flagged 7 UNVERIFIED Unity 6.3 scene-API claims (no `docs/engine-reference/unity/modules/scene.md` exists; LLM cutoff ~Unity 2022 LTS).
+- [x] **Phase 3 — Skeleton created** at `design/gdd/scene-app-state-manager.md`.
+- [x] **Section A (Summary + Overview)**: Framing widget (3 tabs: Framing / ADR ref / Fantasy) captured — all 3 recommended picks (data/infrastructure framing, no ADR ref, no direct fantasy). Surfaced six-state MVP enumeration (Boot/MainMenu/BiomeMap/Level/Shop/Paused) + Prep→Rush-is-NOT-a-Scene-Manager-event assumption.
+- [x] **Section B (Player Fantasy)**: creative-director consulted for infrastructure fantasy framing. Three-framing draft approved (Retry-is-a-beat lead + cold-start support + interruption closer), with "What this fantasy excludes" anti-pillar block per CD tonal guidance.
+- [x] **Section C (Detailed Design — 14 Core Rules + States and Transitions + Interactions)**: 4 design decisions captured via multi-tab widget (async-only LoadSceneAsync, dedicated Boot scene, additive pause overlay, Prep→Rush not SM event). 3 parallel specialists consulted (systems-designer primary + gameplay-programmer + engine-programmer supporting per Foundation/Infrastructure routing). 4 synthesis decisions captured (3-channel event taxonomy, typed IPreUnloadHook + Event Bus trigger, separate OS-background forced-pause path, 1100/600/300 ms retry budget).
+- [x] **Section D (Formulas — D.1–D.5)**: Retry budget decomposition; Pre-unload aggregate window (max-not-sum); OS-background session-expiry threshold; Activation handshake timeout; Bootstrap cumulative init duration. Each with variable table + ranges + worked examples + edge cases.
+- [x] **Section E (Edge Cases — E1–E18)**: Synthesized from systems-designer G1–G6 gaps + gameplay-programmer 5 pitfalls + engine-programmer 5 gotchas. Narrative `**If X**: Y` format.
+- [x] **Section F (Dependencies)**: 13 cross-system rows (Foundation siblings + undesigned downstream); 6 platform-dependency rows; 3 pending ADRs (ADR-003 shared + ADR-008 + ADR-009 new); 4 bidirectional-consistency amendments flagged for Input / Event Bus / Save/Load / Data Registry.
+- [x] **Section G (Tuning Knobs)**: 13 knobs across 6 categories (timing budgets, OS-lifecycle threshold, bootstrap advisory, pre-unload ordering, cross-GDD sortingOrder budget, configurable constants).
+- [x] **Section H (Acceptance Criteria — 36 ACs)**: qa-lead consulted per skill protocol; ACs proposed across 5 gate tiers with Shift-Left Implementation Notes + Gate Summary table with Operability Status column (matches Input System pass-5 B12 pattern). 6 known coverage gaps flagged for story-time addition.
+- [x] **Optional sections**: Visual/Audio brief ("no direct ownership — see downstream"), UI Requirements brief + UX Flag note ("N/A — no user-facing screens; downstream UI GDDs each trigger /ux-design"), Open Questions (15 OQs: 7 Unity 6.3 API verification → Phase 6 unity-specialist; 5 cross-GDD provisional; 2 deferred design; 1 project-level ADR-003).
+- [x] **Phase 5a — Self-Check PASS**: 651 lines, all 12 sections (8 required + 4 optional/header) have real content, zero `[To be designed]` placeholders.
+- [x] **Phase 5a-bis — CD-GDD-ALIGN**: creative-director verdict APPROVE-WITH-CONDITIONS (3 conditions). Conditions 1 (header pillar-claim distinction) + 2 (AC-INT-FF added to Section H.5 bringing total to 37 ACs) applied inline. Condition 3 (ADR-008 gating dependency) logged in Next Tasks. Auto-promoted to APPROVED per pass-6 CD verdict rule. CD review rated Player Fantasy section EXEMPLARY; found no pillar violations across all 14 Rules + 18 Edge Cases + 5 Formulas + 37 ACs.
+- [x] **Phase 5b — Registry update**: 3 new channel constants registered (`gameplay.scene.will_unload`, `gameplay.scene.load_ready`, `gameplay.app.state_changed`); 3 existing entries `referenced_by` updated (`t2_latency_max`, `DeviceDisplayMetrics`, `gameplay_channel_regex`).
+- [x] **Phase 5d — Systems index + session state updated**: Scene Manager row status `Not Started` → **Approved (pass-1 post-CD-GDD-ALIGN)** with full detail; Progress Tracker counts 4/20 → 5/20 MVP systems; Review Gate History new row for CD-GDD-ALIGN (Scene / App State Manager) pass-1 APPROVED.
 
-## Next Tasks
+## Completed earlier sessions (2026-04-24 Phase 6D — Input System)
 
-- [x] **`/design-system data-registry`** — ✅ Complete (pending review)
-- [x] **`/design-system event-bus`** — ✅ Complete (pending review)
-- [x] **`/design-system save-load`** — ✅ Complete, CD-GDD-ALIGN APPROVED (pending review)
-- [x] **`/design-review design/gdd/data-registry.md`** — 2026-04-21 pass 1, MAJOR REVISION NEEDED → REVISED in-session (12 structural blockers). See review log pass-1 entry.
-- [x] **`/design-review design/gdd/data-registry.md` (pass 2)** — 2026-04-21, NEEDS REVISION → REVISED in-session (12 precision blockers). See review log pass-2 entry.
-- [x] **`/design-review design/gdd/data-registry.md` (pass 3)** — 2026-04-21 (fresh session), NEEDS REVISION → REVISED (pass-3 fix pass in fresh session per CD recommendation; 21 blocking items resolved across Tier 1 / Tier 2 / 13 surgical edits). See review log pass-3 entry + revision entry.
-- [x] **`/design-review design/gdd/event-bus.md` (pass 2)** — 2026-04-21 (fresh session), NEEDS REVISION. 20 blockers + 1 structural amendment (Pillar 5 metric reformulation). Systems-index + review log updated. CD recommends fresh session for pass-3 revision. See review log pass-2 entry.
-- [x] **`/design-review design/gdd/data-registry.md` (targeted pass-4)** — 2026-04-21, APPROVED (0 blockers, 2 advisory). Systems-index updated. Data Registry promoted to Approved status.
-- [x] **Revise Event Bus GDD (pass-3 fix pass)** — 2026-04-21 (fresh session per CD recommendation), all 20 pass-2 blockers + 1 D.4 structural amendment resolved. 4 user design decisions adjudicated upfront. See review log pass-3 revision entry.
-- [x] **Event Bus APPROVED** — user selected Option B (Accept revisions and mark Approved) after pass-3 fix pass completed, per CD pass-2 guidance. Systems-index promoted to Approved; review log final verdict entry appended. Targeted pass-4 verification skipped as acceptable risk trade for scope velocity. 2026-04-21.
-- [x] **`/design-review design/gdd/save-load.md` (pass 2)** — 2026-04-21 (fresh session), MAJOR REVISION NEEDED. 15 blockers / 14 recommended / 5 nice-to-have. 0 of 10 pass-1 blockers resolved (GDD unchanged since authoring per git). 5 specialists + CD synthesis — unusually high convergence (4 of 5 flagged R10 false-premise, R12 KVPair<K,V> field-drop, R11 task.Wait() IL2CPP deadlock, R8.b missing version guard). New pass-2 findings: R12 banned list incomplete (HashSet/readonly/record/properties/interfaces), Gate Summary arithmetic wrong (34 claimed vs 43 actual), R3 fsync durability overstated for Android OEMs, R4 migrator-chain indexing ambiguity, R7 producer coherency race, SemaphoreSlim disposal missing. Systems-index + review log updated. CD 8-step resolution sequence: (1) re-ground R10 keystone, (2) fix R12, (3) add ConfigureAwait(false) AC, (4) re-derive D.1-D.4, (5) resolve OQ-1, (6) rewrite Fantasy, (7) regenerate AC table w/ R9a/R9b R11a/R11b R8a-R8e + 7 coverage-gap ACs, (8) patch OQ-4 into Event Bus. CD recommends FRESH session for revision.
-- [x] **Revise Save/Load GDD (pass-3 fix pass)** — 2026-04-21 (same session as pass-2 per user selection, acknowledging fresh-session recommendation). All 10 pass-1 + 15 pass-2 blockers addressed across R10 keystone + R12 + R11 + R8.b + R3 + R7 + R4 + D.1/D.2/D.3. 3 user design decisions pre-answered. AC table regenerated 60 identifiers. OQ-1/OQ-4 closed. Event Bus GDD patched with 7 new events in the same session. See review log 2026-04-21 Revision entry.
-- [x] **Patch Event Bus GDD** — 7 `gameplay.*` events added in this session (currency.changed, tool.purchased, tool.upgraded, cosmetic.purchased, progression.node_unlocked, biome.unlocked, session.level_selected) — all T2 tier, typed payloads specified, Save/Load listed as subscriber on each.
-- [ ] **Decide Save/Load verification path** — either (a) `/design-review design/gdd/save-load.md` targeted pass-4 verification in a fresh session (spot-check applied fixes, NOT full adversarial), or (b) direct acceptance and promote to Approved (Event Bus precedent: Option B taken after pass-3 revision). Recommendation: given volume of pass-3 changes, targeted pass-4 is lower-risk.
-- [ ] **`/consistency-check`** — recommended before designing the next system (verify save-load values don't conflict with existing GDDs)
-- [ ] **`/design-system input-system`** — fourth Foundation GDD
-- [ ] Continue authoring MVP Foundation GDDs in order: Input, Scene/App State Manager, Audio Bus, 2D Physics & Arc Trajectory
-- [ ] Then MVP Core: Level Runtime, Level Scoring, Gopher Spawn, Tool System, Critter AI, Hazard System, Collection System
-- [ ] Then MVP Feature: Currency & Economy, Progression
-- [ ] Then MVP Presentation: HUD, Biome Map, Main Menu/Settings/Pause (minimal), Modal/Dialog+Level End (minimal)
-- [ ] Run `/review-all-gdds` when all MVP GDDs are complete
-- [ ] Run `/gate-check systems-design` before advancing to Architecture phase
+- [x] Read pass-6 CD verdict (review log lines 1303–1429) + Phase 6A methodology entry (lines 697–812) + Phase 6B aggregate findings + current GDD structural map (R9, AC-R13c, AC-R13f, Section C subscribers, Section F Dependencies, Section G Tuning Knobs, OQ table).
+- [x] **Executed Phase 6D targeted author revision** applying all 3 BLOCKING items with specialist-scripted exact fix language:
+  - **BLOCKING #1 (unity-specialist)**: AC-R13f `CopyTo(ProfilerRecorderSample[], int)` → `CopyTo(List<ProfilerRecorderSample>)` (MVP default, managed — acceptable for 1000-event post-run analysis) with `CopyTo(NativeArray<ProfilerRecorderSample>)` zero-alloc alternative documented. `using Unity.Profiling;` namespace note added at AC-R13f + R13.d prose block (line 121 area).
+  - **BLOCKING #2 (performance-analyst)**: AC-R13c `temperature_c: float` → `thermal_severity_level: int` with Android `[0, 6]` per `THERMAL_STATUS_*` (API 29+; sub-API-29 sentinel `-1`) + iOS `[0, 3]` per `ProcessInfo.ThermalState` + `is_throttled = (level >= 2)` derivation on both platforms. Section F new subsection `Native Platform Plugins` with 4-row table (iOS `ProcessInfo.thermalState`, iOS `CoreHaptics`, Android `PowerManager.ThermalStatus` JNI, Android `VibrationEffect` + `Vibrator.vibrate()` JNI) all scoped to Plumbing Sprint Months 4–5. ADR-007 trigger logged.
+  - **BLOCKING #3a (accessibility-specialist)**: R9 primary activation path WCAG re-citation "48 × 48 dp per WCAG 2.2 SC 2.5.8 AA (24 × 24 px minimum); exceeds WCAG 2.1 SC 2.5.5 AAA" with W3C citations; OQ-6 body updated consistent.
+  - **BLOCKING #3b (accessibility-specialist)**: Section C subscribers table second Haptics row `input.gesture.longpress.unhandled` added (closes OQ-12 self-contradiction).
+  - **BLOCKING #3c (accessibility-specialist)**: OQ-2 promoted VS → MVP (direction: promote OQ-2, not demote AC-EC-CB3) preserving pass-5 ux-designer R17 MVP-copy decision.
+- [x] **Applied 2 advisory OQs**: OQ-14 (mid-session Accessibility settings access gap — known accessibility gap until VS Main Menu / Settings / Pause overlay expansion); OQ-15 (Android `VibrationEffect` API 26+ floor with two acceptable resolutions — state min-target ≥ 26 OR Haptics GDD specifies `Vibrator.vibrate()` fallback).
+- [x] **Applied 6 recommended items inline**: AC-P3 "10–15% CPU field measurement" → "engineering estimate pending OQ-8 on-device calibration" (honesty-of-provenance); B10 prose "Library/ + ProjectSettings/" → "ProjectSettings/ (define persists in `ProjectSettings.asset` written by `AssetDatabase.SaveAssets()`)"; Section G `v_lateLift` DPI conversion disclosed (0.1 pt/ms ≈ 15.9 mm/s at 320 dpi; full 160/320/480 dpi coverage); R13.d `0.1 ms residual` noise labeled "design target pending OQ-7 empirical validation"; Section G `v_lateLift` `OnValidate` floor `>= 0.05` enforcement added; `hit_target_scale` promoted to MVP `PlayerPrefs` key `MM.A11y.HitTargetScale` (R9 struct 3 → 4 fields + Section G Accessibility / Platform Knobs new row).
+- [x] **Updated GDD status header** to APPROVED (pass-6 post-Phase 6D) 2026-04-24 with Phase 6D resolution summary + CD-GDD-ALIGN auto-restore note.
+- [x] **Appended Phase 6D revision entry** to `design/gdd/reviews/input-system-review-log.md` (parallel structure to Phase 6A entry at lines 697–812) documenting each BLOCKING + advisory + recommended item addressed + status change + next-step routing.
+- [x] **Updated `design/gdd/systems-index.md`**: Input row status `APPROVED-WITH-CONDITIONS (pass-6)` → **`APPROVED (pass-6)`** reflected in Last Updated line + Design docs reviewed + Design docs approved + MVP systems designed; Review Gate History new row for CD-GDD-ALIGN (Input) pass-6 post-Phase 6D APPROVED.
+- [x] **Updated `production/session-state/active.md`**: Last Updated line, Current Phase, STATUS block, Completed This Session (this entry), Next Tasks.
+
+## Completed earlier sessions (2026-04-24 Phase 6C)
+
+- [x] Read Phase 6B review log entries (unity-specialist lines 816–1043, performance-analyst lines 1046–1194, accessibility-specialist NEW lines 1195–1290) + systems-index.md Input row + active.md Phase 6B scope.
+- [x] **Phase 6C CD synthesis rendered**: pass-6 verdict **APPROVED-WITH-CONDITIONS**, CD-GDD-ALIGN restored from REJECT to APPROVED-WITH-CONDITIONS. Both auto-restore to full APPROVED on Phase 6D merge — no pass-7 required.
+- [x] Specialist disagreements adjudicated (3): `SetScriptingDefineSymbols(string[])` overload existence (Phase 6A correct, pass-5 specialist wrong); performance-analyst REJECT vs unity-specialist CONCERNS severity (same class at document-architecture level); accessibility WCAG AA-vs-AAA (BLOCKING upheld as regulatory-defensibility-grade).
+- [x] Defect-class recurrence assessment: ~75% attenuation vs pass-5 (1 cross-domain API-shape recurrence vs 4 pass-5 convergent findings). Phase 6A citation-heavy methodology verified directionally correct; Phase 6D continues same methodology with added habit of verifying API return-type/shape on cross-domain claims.
+- [x] Appended CD pass-6 verdict section to `design/gdd/reviews/input-system-review-log.md` (parallel structure to passes 1–5: verdict + CD-GDD-ALIGN disposition + 3 BLOCKING Phase 6D items + recommended items + strengths preserved + specialist disagreements adjudicated + defect-class recurrence + scope signal + next step + recommendation to user).
+
+## Completed earlier sessions (2026-04-24 Phase 6B)
+
+- [x] Read `production/session-state/active.md` Phase 6A entry + Phase 6A review log (lines 697–812) + targeted GDD sections for specialist scoping.
+- [x] **Spawned 3 Phase 6B specialists in parallel via single-message multi-Task call** (unity-specialist + performance-analyst + accessibility-specialist NEW) with adversarial prompts + explicit instructions to prove citations wrong.
+- [x] Unity-specialist completed + self-wrote findings to review log lines 816–1043. Verdict: CONCERNS (1 BLOCKING CopyTo + 3 recommended).
+- [x] Performance-analyst completed inline; findings recorded to review log lines 1046–1194. Verdict: REJECT (2 BLOCKING domain errors + 3 concerns).
+- [x] Accessibility-specialist first spawn truncated mid-read; re-spawned fresh with tightened targeted prompt. Second run completed; findings recorded to review log lines 1195–1290. Verdict: CONCERNS (3 BLOCKING/HIGH + 3 advisory + 1 recommendation; 6 pass-1-through-5 oversights flagged).
+- [x] Aggregate Phase 6B: **3 BLOCKING (unity CopyTo, perf thermal_c field + iOS plugin, a11y WCAG citation + Section F Haptics + AC-EC-CB3 timing) + 11 concerns/gaps**.
+- [x] Session-state updated with Phase 6B summary + Phase 6D task list + Phase 6C pending.
+
+## Completed earlier sessions
+
+- [x] Read `production/session-state/active.md` pass-5 entry + full pass-5 review log + current `design/gdd/input-system.md` (788 lines pre-Phase 6A).
+- [x] Gathered Unity 6.3 citations via parallel WebSearch/WebFetch: `SetScriptingDefineSymbols` overloads, `ProfilerRecorder.StartNew` + `ProfilerCategory.Scripts`, game-ci unity-test-runner + unity-builder, Cortex-A53/A55 CPU thermal scaling, WCAG 2.1 SC 1.4.11, EAA June 2025, UK Equality Act Section 29, motor-impaired lift velocity research.
+- [x] Captured 4 user design decisions via AskUserQuestion multi-tab widget (B1 Rush-phase REQUIRED, B16 persistent A11y button, B18 OQ-12 + haptic at VS, B7 `v_lateLift = 0.1 pt/ms`).
+- [x] Revised `design/gdd/input-system.md` addressing all 18 BLOCKING items across status header, Summary, Quick reference, R3.c, R3.e, Downstream tables (Section C + F), R9, R13.b/d, D.1, D.3 (rule block + variable table + worked examples), Section G tuning knobs (v_lateLift + CI injection + PhaseTransitionSuppressDuration), Section H ACs (AC-R3d-required rewrite + new AC-R3g-required BLOCKING CI + new AC-R3d-audio-xref ADVISORY + AC-R13c thermal-state + AC-P3 CPU-domain + AC-D3-margin-validate mechanism + AC-INV5 demotion + AC-INT3/INT5 divergence disclosure + AC-EC-CB3 MVP copy promotion), Gate Summary (reconciliation + CI Operability Status column), Shift-Left Implementation Notes, Section G Cross-Reference table, Open Questions table (+OQ-11 + OQ-12 + OQ-13 + OQ-6 updated).
+- [x] Updated `design/gdd/systems-index.md` Input row to REVISED (pass-5 Phase 6A); updated Progress Tracker summary.
+- [x] Appended Phase 6A revision entry to `design/gdd/reviews/input-system-review-log.md` with per-BLOCKING-item resolution + user design decisions + Phase 6B/6C spawn instructions.
+
+## Next Tasks (for next session)
+
+- [x] **`/design-system scene-app-state-manager`** (2026-04-24, this session): **COMPLETE**. Foundation #5 GDD authored via full skill run (Phase 2 context + Phase 2e feasibility brief + Phase 3 skeleton + Sections A/B/C/D/E/F/G/H + 3 optional + Phase 5 finalization). 3 parallel specialists consulted for Section C (systems-designer + gameplay-programmer + engine-programmer); 1 for Section B (creative-director fantasy framing); 1 for Section H (qa-lead ACs); 1 for Phase 5a-bis (creative-director CD-GDD-ALIGN). CD verdict APPROVE-WITH-CONDITIONS → APPROVED on condition application. 7 UNVERIFIED Unity 6.3 scene-API claims flagged for Phase 6 `unity-specialist` adversarial review.
+- [x] **`/consistency-check design/gdd/scene-app-state-manager.md`** (2026-04-24, this session): **COMPLETE — Verdict PASS**. 6 Scene-Manager-relevant registry entries verified (`t2_latency_max`=100ms 3-doc agreement with Input/Event Bus, `DeviceDisplayMetrics` consistent, `gameplay_channel_regex` compliant for 3 new channels, `gameplay.scene.will_unload` + `gameplay.scene.load_ready` + `gameplay.app.state_changed` internally consistent across R5/R8/R9/R10/AC-R5/AC-R8/AC-R8a/E8/Section F). AC-INT-FF cross-reference to Input AC-P1 ("Feedback Floor End-to-End (Pillar 5)") verified valid. ⚠️ Pending bidirectional amendments to Event Bus / Save/Load / Input / Data Registry confirmed as known-deferred (not a conflict per skill ontology — registry's forward-looking `referenced_by` claims are flagged in registry comments + Scene Manager Section F lines 419-425). No 🔴 CONFLICTS → no `docs/consistency-failures.md` reflexion-log append. No registry corrections needed.
+- [ ] **`/design-review design/gdd/scene-app-state-manager.md` in a fresh session** — full adversarial specialist pass (game-designer, systems-designer, qa-lead, engine-programmer, unity-specialist, performance-analyst). First system in project to introduce Fast Enter Play Mode Reset() pattern (R2.a + AC-BOOT-FEPM) — unity-specialist review especially load-bearing for the 7 UNVERIFIED Unity 6.3 claims.
+- [ ] **4 bidirectional-consistency amendments** to existing Foundation GDDs (non-breaking additive edits, do NOT require full re-review):
+  - **Input System** — add Scene Manager row to Section F Dependencies
+  - **Event Bus** — add Scene Manager as publisher of `gameplay.scene.*` + `gameplay.app.state_changed` channels in Section C Interactions + Section F Dependencies; add `IPreUnloadHook` priority 10 registration rule to R-rules
+  - **Save/Load** — add Scene Manager as `FlushSync()` caller on OS background + quit in Section F; add `IPreUnloadHook` priority 20 registration
+  - **Data Registry** — add Scene Manager as unload-sequence driver (informational only)
+- [ ] **ADR-008 (Scene Loading Strategy)** — per CD Condition 3, this ADR must be authored BEFORE the first Scene Manager implementation story (async-only LoadSceneAsync + activation-handshake contract + Addressables deferral rationale). Pre-production scope.
+- [ ] **ADR-009 (Bootstrap Architecture)** — dedicated Boot scene + BootLoader single-construction authority + Foundation Reset() discipline for Fast Enter Play Mode. Pre-production scope.
+- [ ] **`/architecture-decision ADR-007`** (prior trigger from Input System) — stub CoreHaptics / `ProcessInfo.thermalState` / `PowerManager.ThermalStatus` / `VibrationEffect` native-plugin bridge. Trigger logged; full ADR authored at pre-production (Plumbing Sprint scoping task).
+- [ ] Continue authoring MVP Foundation GDDs: Audio Bus (#6), 2D Physics & Arc Trajectory (#7).
+- [ ] Then MVP Core: Level Runtime, Level Scoring, Gopher Spawn, Tool System, Critter AI, Hazard System, Collection System.
+- [ ] Then MVP Feature: Currency & Economy, Progression.
+- [ ] Then MVP Presentation: HUD (must absorb T2 dual-channel REQUIRED subscriber + contact.began REQUIRED on Rush-phase scenes per pass-5 B1 + haptic third channel at VS per B18), Biome Map, Main Menu/Settings/Pause (must absorb persistent title-screen Accessibility button per pass-5 B16 + VS-sprint-gating Accessibility Settings UI per B17), Modal/Dialog+Level End.
+- [ ] Run `/review-all-gdds` when all MVP GDDs are complete.
+- [ ] Run `/gate-check systems-design` before advancing to Architecture phase.
 
 ## Active Files
 
-- `design/gdd/game-concept.md` — concept doc (approved)
+- `design/gdd/game-concept.md` — concept doc (Pillar 5 dual-threshold text stable since pass-3)
 - `design/art/art-bible.md` — art bible (approved)
-- `design/gdd/systems-index.md` — systems decomposition (approved; counts updated to 3/20)
-- `design/gdd/data-registry.md` — Foundation #1 GDD (complete, pending review)
-- `design/gdd/event-bus.md` — Foundation #2 GDD (complete, pending review)
-- `design/gdd/save-load.md` — Foundation #3 GDD (complete, CD-GDD-ALIGN APPROVED, pending review)
-- `design/registry/entities.yaml` — entity registry (updated with Save/Load referenced_by entries)
+- `design/gdd/systems-index.md` — systems decomposition (Scene Manager row updated to Approved pass-1 this session; Review Gate History row added)
+- `design/gdd/data-registry.md` — Foundation #1 GDD (APPROVED pass 4)
+- `design/gdd/event-bus.md` — Foundation #2 GDD (APPROVED + pass-4 cross-coordination amendment + pass-4 Input-coordination Interactions additions — APPROVED preserved; pending bidirectional-consistency amendment to absorb Scene Manager as publisher of 3 new channels + IPreUnloadHook priority 10)
+- `design/gdd/save-load.md` — Foundation #3 GDD (APPROVED pass 4; pending bidirectional-consistency amendment to absorb Scene Manager as FlushSync caller + IPreUnloadHook priority 20)
+- `design/gdd/input-system.md` — Foundation #4 GDD (APPROVED pass-6 post-Phase 6D 2026-04-24, 71 body-verified ACs; pending bidirectional-consistency amendment to absorb Scene Manager as sceneLoaded-hook provider + IPreUnloadHook priority 30)
+- `design/gdd/scene-app-state-manager.md` — **Foundation #5 GDD NEW this session** (APPROVED pass-1 post-CD-GDD-ALIGN 2026-04-24, 651 lines, 37 ACs, 14 Rules + 5 Formulas + 18 Edge Cases + 15 OQs)
+- `design/gdd/reviews/input-system-review-log.md` — Phase 6A/6B/6C/6D entries (prior sessions)
+- `design/registry/entities.yaml` — **UPDATED this session**: 3 new constants (`gameplay.scene.will_unload`, `gameplay.scene.load_ready`, `gameplay.app.state_changed`); 3 referenced_by updates (`t2_latency_max`, `DeviceDisplayMetrics`, `gameplay_channel_regex`)
 - `.claude/docs/technical-preferences.md` — engine + platform config
+- `docs/engine-reference/unity/VERSION.md` — Unity 6.3 LTS pin (2026-02-13) + knowledge gap warning
+- `docs/engine-reference/unity/modules/input.md` — Input System reference
+- `docs/engine-reference/unity/modules/physics.md` — Physics reference (3D only; Physics2D/Box2D status for B10 RECOMMENDED)
+- `docs/engine-reference/unity/modules/ui.md` — UI reference (UI Toolkit + UGUI)
 - `CLAUDE.md` — references Unity 6.3 LTS reference docs
 
-## Key Decisions
+## Key Decisions (recorded this session)
 
-- Engine: Unity 6.3 LTS (6000.3.x)
-- Platform: Mobile iOS + Android, portrait, Mali-G52 floor
-- Timeline: 9 months to Shippable v1.0; MVP Month 2-3; Vertical Slice Month 4
-- Visual direction: Cartoon Heist Diorama (toy playset aesthetic, flat vector, 7 reserved function colors)
-- Pillar-4 Six (non-negotiable MVP): Level Runtime + Scoring + Tool + Hazard + Collection + Critter AI
-- Pillar 3 validation is a VS-gate (not MVP-gate) — documented in systems index
-- 4 Pre-production ADRs required before first prototype: Leaderboard model (banked-count), URP mobile settings, Save schema versioning, Monetization boundary
+- **Phase 6A methodology**: author-led revision with inline Unity 6.3 LTS doc citations + accessibility-standards citations. Not author-alone (pass-4's methodology that produced pass-5's defect class) — citations are inline and verifiable against source URLs, so Phase 6B specialist verification is checking the citations land, not the claims themselves.
+- **4 design decisions captured via multi-tab widget**: Rush-phase REQUIRED for contact.began (B1), persistent title-screen button (B16), OQ-12 deaf-blind gap + Haptics REQUIRED at VS (B18), `v_lateLift = 0.1 pt/ms` (B7). All 4 matched recommended options.
+- **Scope discipline**: Haptics at VS (not MVP) per B18 user decision — adds REQUIRED cert-gating at VS rather than scope-bloating MVP to include Haptics GDD authoring. Deaf-blind gap documented as known regression at MVP, closes at VS.
+- **AC-P3 ceiling 4.6 ms (not 5.0 ms)**: CPU-domain re-derivation per Cortex-A53/A55 10–15% sustained-load scaling citation. Pass-4's 5.0 ms was 0.4 ms too loose — a real Pillar 5 false-negative under thermal stress.
+- **AC-R13c correlated-tail downgrade gated by 3 preconditions** (not 1): Release-tier failure pattern + thermal-state correlation ≥ 80% + ADR-003 device precondition. Simultaneous non-thermal 0.3 ms regressions in both PreFire and T1Chain no longer get merge amnesty.
+- **AC-INV5 demoted from BLOCKING CI to ADVISORY**: pass-5 B15 tautology finding sustained — "summary" AC passes iff its three components pass; no independent test logic. Demotion opens the BLOCKING CI slot for AC-R3g-required (B1).
 
-## Pre-Production Action Items
+## Pre-Production Action Items (unchanged from prior session)
 
 1. Write Leaderboard Model ADR (banked-count, non-deterministic physics OK)
 2. Write URP Mobile Settings ADR (no HDR, no MSAA, disabled 2D shadows, Forward renderer)
-3. Write Save Schema Versioning ADR (JSON format, migration rules)
+3. Write Save Schema Versioning + Reference Device ADR-003 (JSON format, migration rules, named Android + iOS reference devices — Save/Load + Input System both block DEVICE ACs on this)
 4. Write Monetization Boundary ADR (IAP catalog, ad placement rules, no pay-to-win)
-5. Build "Stress Scene" in Week 2 of prototype (5 holes × 40 Rigidbody2D on target Android device)
+5. Build "Stress Scene" in Week 2 of prototype (5 holes × 40 Rigidbody2D on target Android device) — includes Input pipeline budget validation per Input D.1 / AC-P1/P2/P3 + Event Bus AC-F4-aggregate per-frame T1 aggregate validation + **OQ-13 Rush-peak T1 aggregate empirical measurement** (new pass-5 B6 trigger)
 6. Schedule Plumbing Sprint at Months 4-5 (IAP + ads + analytics + cloud save)
 
-## Open Questions
+## Open Questions (project-level; separate from per-GDD OQs)
 
-- First biome choice for v1.0 second slot: Meadow + Orchard vs. Meadow + Mines (decision during `/art-bible` biome authoring pass, or during `/design-system` for Gopher Spawn)
+- First biome choice for v1.0 second slot: Meadow + Orchard vs. Meadow + Mines
 - Energy system model: lives-regen vs. ad-gated retries vs. cooldown-free (deferred to soft-launch A/B test)
 - Leaderboard cadence: daily/weekly/monthly/season (deferred to post-launch)
