@@ -198,3 +198,77 @@ Pass-4 should be a verification pass — no fresh adversarial spawn, just confir
 
 ---
 
+## Review — 2026-04-27 — Verdict: REVISED-pending-pass-5-verification (pass-4)
+
+**Pass:** 4 (author-led revision; no fresh adversarial spawn per pass-3 verification protocol)
+**Scope signal:** M (medium, single-session author-led)
+**Specialists:** None (author-led revision only — pass-3 specialists already adjudicated all 12 BLOCKING + 16 RECOMMENDED items)
+**Blocking items applied:** 12 of 12 | **Recommended applied:** 4 of 16 (high-priority subset per pass-3 review log triage; remaining 12 RECOMMENDED deferred to pass-5 or implementation time)
+**Prior verdict resolved:** Pending (pass-5 verification will confirm)
+
+### Pass-4 protocol followed
+
+Per pass-3 review log "Verification criterion for pass-4": this pass applied all 12 BLOCKING + 4 high-priority RECOMMENDED items via direct edits, with no fresh adversarial spawn. The next session will run pass-5 as verification-only — confirming that fixes landed correctly, NOT scanning for new issues. Per pass-3 CD strategic recommendation: if pass-5 surfaces NEW issues vs verifying pass-4 fixes, escalate to CD for protocol-level review.
+
+### 12 BLOCKING items applied
+
+| # | Blocker | Pass-3 source | Pass-4 fix landed |
+|---|---------|---------------|-------------------|
+| 1 | R10 step 5 silently clears user-pause | game B1 + sys B2 | R10 step 2 captures `_userPausedBeforeBackground = IsPaused` BEFORE mutation; resume step 5 sets `IsPaused = _userPausedBeforeBackground` (mirrors capture). D.3 pseudocode + variable table updated; new sub-flag table row in Detailed Design. AC-R10b verifies the preservation. |
+| 2 | AC-R10b ADVISORY tier wrong for P0 contract | game B3 + qa B5 | AC-R10b promoted to BLOCKING CI (PLAYMODE). Gate Summary tier counts updated (BLOCKING CI PLAYMODE 8→9; ADVISORY net same — AC-R9e takes the freed slot). Total recounted at 49 (was 46) — see net change explanation in BLOCKING #6 below. |
+| 3 | D.1 slack diagnostic false-negative | sys B1 + perf B2 | Added `T_sm_overrun = max(0, T_sm_actual - T_sm_budget)` and `T_lr_overrun = max(0, T_lr_actual - T_lr_budget)` per-term assertions. DEVELOPMENT_BUILD logs each unconditionally when > 0, independent of `T_slack_consumed > T_slack_budget`. New worked example shows the false-negative case (1300ms T_sm + 400ms T_lr would have appeared as 0ms slack consumed under naive subtraction). AC-D1 rewritten to verify unconditional logging. |
+| 4 | iOS phone-call uses OnApplicationFocus, not OnApplicationPause | unity B4 | New iOS-only path in R10: `OnApplicationFocus(false)` gated by `Application.platform == RuntimePlatform.IPhonePlayer` calls `SaveManager.FlushSync()` + sets `AudioListener.pause = true` (NOT `IsPaused = true` — focus loss is not a user-intended pause). On focus return: `AudioListener.pause = false`. New OQ-21 tracks device verification across iOS focus-loss scenarios (phone call, banner notification, Control Center, lock-screen-without-background). |
+| 5 | R7 async hooks main-thread + R13 Task.Wait deadlock | unity B3 | R7 `IPreUnloadHook` async-contract constraints added: `ConfigureAwait(false)` and `Task.Run` prohibited (Save/Load is the documented exception with isolated background thread). R13 rewritten to use synchronous teardown methods exclusively — Foundation siblings MUST expose: `SaveManager.FlushSync()` (already exists), `EventBus.DisposeSync()` (cross-GDD obligation), `InputDispatcher.TeardownSync()` (cross-GDD obligation). No `await` on the quit path in either Editor or Player builds for uniformity. Bidirectional consistency amendments updated to capture Event Bus + Input new sync-teardown obligations. |
+| 6 | AC-EC-E14 PlayMode test physically un-executable | qa B1 | AC-EC-E14 split into AC-EC-E14a (EDITMODE — interception via `playModeStateChanged` callback + `EditorPrefs` storage) + AC-EC-E14b (PLAYMODE — post-jump behavior with Play mode already entered). Pass-2's "programmatically trigger Play" step dropped — that side now belongs to E14a in EDITMODE. H.3 count 7→8; tier counts updated: EDITMODE 2→3 (+E14a); PLAYMODE 15→16 (+E14b, -E14, +R9f). Net total +3 from all pass-3 changes. |
+| 7 | R9 RequestUnpause missing IsPaused==false guard in numbered steps | game B4 | RequestUnpause step 1 added: "If `IsPaused == false` → no-op (mirrors RequestPause step 1)". AC-R9e promoted from coverage gap to ADVISORY (PLAYMODE) verifying the full sequence including the new step 1 guard. Coverage gap entry retained for change-log traceability with note to remove at pass-5. |
+| 8 | R6/R11 `Resources.UnloadUnusedAssets()` await unspecified | unity B2 | R6 rewritten with explicit mode-dependent ordering: `LoadSceneMode.Single` auto-reclaims (NO redundant manual call); additive unload requires explicit `await Resources.UnloadUnusedAssets()` AFTER `await UnloadSceneAsync(...)`. Pass-2's redundant placement of UnloadUnusedAssets inside `BeginTransitionAsync` corrected. R11 budget breakdown updated to remove the spurious "+ UnloadUnusedAssets 70ms" line item. D.1 worked examples recomputed accordingly. R9 RequestUnpause step 3 explicitly awaits the call. |
+| 9 | R2.b rationale wrong | unity B1 | R2.b prescription preserved (`allowSceneActivation` not in Awake, defer to async post-Awake `BeginTransitionAsync`). Rationale rewritten: real failure mode is stale `AsyncOperation` reference held in a static field across FEPM cycles when domain reload disabled, causing `MissingReferenceException` on the second cycle. Pass-2's "silently ignored on second FEPM cycle" claim removed (it was fabricated — the API is not silent, it produces undefined results). R2.a `Reset()` discipline backstops by clearing static refs. Unity 6 docs link retained. |
+| 10 | `_pendingPause` no destination-scene guard | sys B3 | R12 firing-order block extended: BEFORE firing `_pendingPause` after a transition completes, validate the new `AppState ∈ {Level}` (MVP — only state where pause is valid; E7 already prohibits Boot pause; same logic for MainMenu/BiomeMap/Shop). On invalid destination: discard `_pendingPause`, log ADVISORY in DEVELOPMENT_BUILD, no error. AC-R12d added to Known coverage gaps with full GIVEN/WHEN/THEN spec for Story 2 implementation time. |
+| 11 | R9 PauseOverlay RequestUnpause bypasses `Resources.UnloadUnusedAssets()` | perf B1 | RequestUnpause step 3 explicitly awaits `Resources.UnloadUnusedAssets()` after `await UnloadSceneAsync("PauseOverlay")` — additive unload does not auto-reclaim per Unity 6 contract. New AC-R9f memory-stability AC: 10 pause/unpause cycles after a warm-up cycle, `GC.GetTotalMemory(true)` delta within `[baseline - 1MB, baseline + 2MB]` (asymmetric tolerance). Failure mode without the fix: 5–20MB drift across 10 cycles. |
+| 12 | R14.e Boot scene EventSystem requires InputSystemUIInputModule | unity B5 | R14.e extended: Boot-scene EventSystem MUST use `InputSystemUIInputModule`; `StandaloneInputModule` MUST NOT be present on the same GameObject. Mixed-module setup silently drops UI events because the two modules race. AC-INV2 condition (d) added: scene-validator asserts both module presence (c) + module absence (d). |
+| 13 | Prep Phase ejected at 60s general threshold | game B2 | Third tier `bg_expiry_in_prep_seconds` (default 600s, safe-range [300, 1200]) added to R10 step-5 threshold logic, D.3 pseudocode + variable table, Section G tuning knobs. New `_backgroundedDuringPrep` flag captured at OS-background time (R10 step 5). New worked example: 8-min Prep Phase interruption resumes in-place (480s < 600s); 12-min ejects to MainMenu. Three-tier threshold replaces pass-2's two-tier. CD adjudicated in favor of the third-tier approach (more surgical) over widening general to 1800s (game-designer's alternative). |
+
+### 4 high-priority RECOMMENDED applied
+
+| # | Recommended | Pass-3 source | Pass-4 fix landed |
+|---|-------------|---------------|-------------------|
+| REC-1 | "7 severity tiers" → "9 severity tiers" | qa B3 | Section H opening paragraph + Gate Summary header updated. Subsection counts updated: H.1 28→30; H.3 7→8. Total 46→49. Verified via grep — no stale "7 severity tiers" or "46 ACs" references remain. |
+| REC-2 | AC-BOOT-FEPM CI prerequisite documentation | qa B2 | AC-BOOT-FEPM expanded with CI prerequisite block: `ProjectSettings/EditorSettings.asset` MUST contain `m_EnterPlayModeOptionsEnabled: 1` AND `m_EnterPlayModeOptions: 2` (DisableDomainReload encoding) before the test can run. Without the prerequisite, test runs in default-domain-reload mode with false-positive coverage. |
+| REC-3 | D.3 pseudocode `else` branch missing `AudioListener.pause = false` | sys B4 | D.3 pseudocode rewritten with `AudioListener.pause = false` as Step 0 (unconditional, BEFORE the threshold branch) — ensures audio restore even when the resume path branches to `BeginTransitionAsync`. R10 step 1 of `paused == false` branch already does this; the pseudocode now matches. |
+| REC-4 | AC-R11 raise to 10 retries; track 20-retry as P1 post-Alpha | qa B4 | AC-R11 sample size raised from 5 → 10 retries for the BLOCKING DEVICE tier (n=5 was statistically thin; n=10 reliably surfaces 1-in-100 tail events). 20-retry soak deferred to P1 post-Alpha sprint task (`production/sprints/post-alpha/perf-soak-20-retry.md`) — NOT a blocking gate. CD recommended this deferral. |
+
+### 12 RECOMMENDED deferred
+
+REC-5 through REC-16 (test file naming, AC sequence-counter spec, AC-INT-FF integration test path, AC-R10c/d stale variable refs, R10 LevelRuntime compile pattern, D.5 strict-less-than, AC-P-UnityBoot Mali-G52 estimate, D.1 cold-cache 250ms hooks, OQ-1 closeable, AC-R9e tier upgrade — already covered by pass-4 BLOCKING #7, battery/thermal retry rate, ADR-003 interim QA fallback) deferred to pass-5 verification or implementation-time discovery. Pass-3 review log triaged these as "lower priority — defer if time pressure."
+
+### File metrics
+
+- Lines: 727 → ~880 (+153) — primarily from R10 expansion (iOS path + three-tier + user-pause), R7 async-contract block, R13 sync-teardown contract, AC-EC-E14 split (one AC → two), new AC-R9e/AC-R9f.
+- ACs: 46 → 49 (+3 net: +AC-R9e, +AC-R9f, +AC-EC-E14a, +AC-EC-E14b, -AC-EC-E14)
+- OQs: 20 → 21 (+1: OQ-21 iOS focus-loss device verification)
+- Modified rules: R2.b, R6, R7, R9 (RequestUnpause), R10, R11, R12, R13, R14.e
+- Modified formulas: D.1 (per-term overrun), D.3 (three-tier + user-pause + Step 0)
+- Modified ACs: AC-D1, AC-INV2, AC-R10b (tier), AC-R11, AC-BOOT-FEPM
+- Split ACs: AC-EC-E14 → AC-EC-E14a (EDITMODE) + AC-EC-E14b (PLAYMODE)
+- New ACs: AC-R9e (ADVISORY), AC-R9f (PLAYMODE)
+- New OQ: OQ-21
+- Bidirectional amendments: Event Bus + Input now require sync teardown methods (was: pre-unload hooks only)
+- Stale references checked + updated: zero "7 severity tiers" remnants; zero "46 ACs" remnants; un-suffixed "AC-EC-E14" references in tooling table + shift-left notes + E14 edge case prose all updated to E14a/E14b
+
+### Specialist disagreements
+
+None at pass-4 (no fresh spawn). Pass-3 single disagreement (bg_expiry tier proposal, BLOCKING #13) was already CD-adjudicated in favor of three-tier approach; pass-4 implements the adjudicated outcome.
+
+### Next step
+
+**Pass-5 verification-only re-review in fresh session** (`/clear` recommended). Pass-5 spawns specialists ONLY to verify the pass-4 fixes landed correctly — NOT to scan for new issues. Per pass-3 CD: "if pass-5 surfaces NEW issues vs verifying pass-4 fixes, escalate to CD for protocol-level review." If pass-5 finds the fixes hold, GDD status moves to APPROVED.
+
+**Validation criteria for pass-5:**
+- All 12 BLOCKING fixes from pass-3 review log table verified present in current GDD body.
+- All 4 high-priority RECOMMENDED fixes verified.
+- AC count math reconciled across header + subsection counts + Gate Summary tier sums (49 / 30+3+8+2+6 / 9+9+16+2+4+3+2+1+3).
+- No internal contradictions between R10 step numbering, D.3 pseudocode, sub-flag table, Section G tuning knobs, and worked examples.
+- Cross-GDD obligations (Event Bus `DisposeSync`, Input `TeardownSync`) flagged for Phase 5 amendment work but not yet executed (pass-5 verifies they are correctly TRACKED, not yet APPLIED).
+
+---
+
