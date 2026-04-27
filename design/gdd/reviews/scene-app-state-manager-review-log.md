@@ -101,3 +101,100 @@ None. Five complementary critique vectors (fantasy/tone, formula coherence, test
 **Validation criterion for pass-3 (per CD synthesis):** D.1 cold-cache example internally consistent; ACs run green on game-ci without flake across 5 consecutive runs (when implemented); Mali-G52 retry loop holds memory steady across 10 retries (when DEVICE testing begins).
 
 ---
+
+## Review — 2026-04-27 — Verdict: NEEDS REVISION (pass-3)
+
+**Pass:** 3 (second formal `/design-review`; verifies pass-2 fixes + fresh adversarial scrutiny)
+**Scope signal:** M (medium, ~2-3 days author-led revision)
+**Specialists:** game-designer + systems-designer + qa-lead + unity-specialist + performance-analyst (parallel spawn) + creative-director (synthesis)
+**Blocking items:** 12 unique (17 raw findings; 5 convergent dedups) | **Recommended:** 16 | **Nice-to-have:** 13
+**Prior verdict resolved:** Yes — pass-2 fixes verified to land correctly across all 5 specialists. Pass-3 finds NEW issues at deeper implementation-contract layer (engine-API, threading, platform-specific behavior).
+
+### CD synthesis verdict (quoted)
+
+> "Pass-2 fixes landed correctly. Pass-3 found 17 raw BLOCKING items (≥12 unique after dedup) — but every one of them is a contract-level or implementation-level defect, not an architectural one. The skeleton is sound. The flesh has hairline fractures. Two of three pillar fantasies have at least one finding that touches the architecture's *promise*, not just its plumbing — that's why this is NEEDS REVISION and not 'minor polish.' But every BLOCKING item is a surgical fix: add a flag, change a tier, swap an API, add a guard, await a result, document a constraint. Estimated total fix time: 2–3 days for a single author, not weeks."
+
+### Convergent specialist findings (highest confidence)
+
+Four findings independently flagged by 2+ specialists:
+
+1. **R10 step 5 silently clears user-pause** — game-designer BLOCK-1 + systems-designer BLOCKING-2.
+2. **AC-R10b ADVISORY → BLOCKING tier** — game-designer BLOCK-3 + qa-lead B5 + systems-designer R3.
+3. **D.1 `T_slack_consumed` false-negative** — systems-designer BLOCKING-1 + performance-analyst BLOCKING-2.
+4. **AC-R11 max-of-5 statistical inadequacy** — game-designer REC-4 + qa-lead B4 (different severities).
+
+### Pillar alignment threats
+
+- **"Cold-start ready"** (Pillar 5 preconditions): iOS `OnApplicationFocus` gap — Section B explicitly names "phone call comes in" as the canonical scenario; spec doesn't handle it on iOS.
+- **"Seams are where the chaos isn't"**: R10 user-pause silently cleared on backgrounding violates the third Section B fantasy.
+- **"Retry is a beat"** (Pillar 5 + Concept "<2s"): NOT structurally threatened. Issues are budget-diagnostic integrity (D.1) and tooling (5-vs-20 retry coverage). Architecture delivers <2s.
+
+### 12 BLOCKING items (unique after dedup)
+
+| # | Blocker | Source | Required Fix Direction |
+|---|---------|--------|------------------------|
+| 1 | R10 step 5 silently clears user-pause | game B1 + sys B2 | `_userPausedBeforeBackground` flag + step 5 guard `Else → IsPaused = _userPausedBeforeBackground`; D.3 pseudocode mirror |
+| 2 | AC-R10b ADVISORY tier wrong for P0 contract | game B3 + qa B5 | Promote to BLOCKING CI (PLAYMODE); recount Gate Summary (BLOCKING CI PLAYMODE 8→9; ADVISORY 3→2; total stays 46) |
+| 3 | D.1 slack diagnostic false-negative | sys B1 + perf B2 | Add per-term overrun assertions `T_sm_overrun`, `T_lr_overrun`; log unconditionally in DEVELOPMENT_BUILD when either > 0; update AC-D1 |
+| 4 | iOS phone-call uses OnApplicationFocus, not OnApplicationPause | unity B4 | Add `OnApplicationFocus(false)` path with `FlushSync` + `AudioListener.pause = true` (NOT `IsPaused`); track as new OQ-21 |
+| 5 | R7 async hooks main-thread + R13 Task.Wait deadlock | unity B3 | Add `IPreUnloadHook` contract: NO `ConfigureAwait(false)` / `Task.Run`; R13 quit hooks must be synchronous (Save/Load is via `FlushSync`; EB + Input must expose sync teardown) |
+| 6 | AC-EC-E14 PlayMode test physically un-executable | qa B1 | Split into AC-EC-E14a (EditMode — interception) + AC-EC-E14b (PlayMode — post-jump); drop "programmatically trigger Play" |
+| 7 | R9 RequestUnpause missing IsPaused==false guard in numbered steps | game B4 | Add as step 1 of `RequestUnpause()`, mirroring `RequestPause()` step 1; promote AC-R9e from coverage gap to ADVISORY |
+| 8 | R6/R11 `Resources.UnloadUnusedAssets()` await unspecified | unity B2 | Add explicit `await`; clarify ordering for `LoadSceneMode.Single` (BEFORE `LoadSceneAsync`) vs Additive unload (AFTER `UnloadSceneAsync`) |
+| 9 | R2.b rationale wrong | unity B1 | Rewrite rationale: real FEPM hazard is stale `AsyncOperation` in static field, not Awake "set and use" restriction; failure mode "silently ignored" is fabricated. Prescription correct (`BeginTransitionAsync` after Awake) — only the *why* needs fixing |
+| 10 | `_pendingPause` no destination-scene guard | sys B3 | Add to R12: validate `AppState ∈ {Level}` before executing deferred `_pendingPause`; discard with ADVISORY log otherwise; track AC-R12d coverage gap |
+| 11 | R9 PauseOverlay RequestUnpause bypasses `Resources.UnloadUnusedAssets()` | perf B1 | Add `await Resources.UnloadUnusedAssets()` after `UnloadSceneAsync` in `RequestUnpause()`; new memory-stability AC verifying `GC.GetTotalMemory` delta after 10 cycles |
+| 12 | R14.e Boot scene EventSystem requires InputSystemUIInputModule | unity B5 | Add to R14.e: "MUST use `InputSystemUIInputModule`; `StandaloneInputModule` must not be present." AC-INV2 condition (d): scene-validator asserts module |
+| 13 | Prep Phase ejected at 60s general threshold | game B2 | Add THIRD tier `bg_expiry_in_prep_seconds` (default 600s); CD adjudicated game-designer (1800s general) vs systems-designer (third tier) → third tier wins (more surgical) |
+
+### Recommended (16 items — apply at pass-4 author's discretion)
+
+Highest priority (pass-4 should fix):
+- **REC-1**: Header "7 severity tiers" → "9" reconciliation (qa B3)
+- **REC-2**: AC-BOOT-FEPM CI configuration prerequisite documentation (qa B2)
+- **REC-3**: D.3 pseudocode `else` branch missing `AudioListener.pause = false` (sys B4)
+- **REC-4**: AC-R11 raise to 10 retries for BLOCKING; track 20-retry soak as P1 post-Alpha (qa B4 — CD recommended deferral)
+
+Lower priority (defer if time pressure):
+- REC-5: Test file naming convention (qa R4)
+- REC-6: AC-R12c sequence-counter mechanism spec (qa R2)
+- REC-7: AC-INT-FF integration test file path (qa R1)
+- REC-8: AC-R10c/R10d use stale single-threshold variable (qa N1)
+- REC-9: R10 step 4 LevelRuntime compile-safety pattern (sys R2)
+- REC-10: D.5 sums-of-ceilings strict-less-than (perf REC-3)
+- REC-11: AC-P-UnityBoot Mali-G52 estimate may be underestimate (perf REC-2)
+- REC-12: D.1 cold-cache 250ms hooks inconsistent with D.2 budgets (perf REC-1)
+- REC-13: OQ-1 closeable now via Unity 6 docs (unity REC-5)
+- REC-14: AC-R9e upgrade from coverage gap to ADVISORY (qa R3)
+- REC-15: Battery/thermal retry-rate constraint (perf REC-6)
+- REC-16: ADR-003 interim QA fallback policy (qa R5)
+
+### Specialist disagreements
+
+**One minor — bg_expiry tier proposal**: game-designer wanted to widen general threshold to 1800s; systems-designer wanted a third tier specifically for Prep Phase. Creative-director adjudicated in favor of **third tier** (more surgical, preserves 60s default for true MainMenu/idle, gives Prep Phase the protection Section B fantasy demands). Resolution applied as BLOCKING #13.
+
+No other specialist disagreements. Findings were complementary across 5 critique vectors.
+
+### Strategic recommendation (CD)
+
+Foundation GDDs (Asset Loading is on deck) should spawn unity-specialist + performance-analyst by default in `/design-system`, not just `/design-review`. **10 of 17 pass-3 BLOCKING items are findings only those specialists can produce** — Foundation systems are 80% engine-contract, 20% design. Update Foundation review protocol before next Foundation GDD authoring.
+
+### Verification criterion for pass-4
+
+Pass-4 should be a verification pass — no fresh adversarial spawn, just confirm the 12 BLOCKING + 4 high-priority RECOMMENDED items landed correctly. If pass-4 surfaces NEW issues (vs verifying pass-3 fixes), the question shifts to "is the spec asymptotic to perfection or genuinely incomplete?" — at that point, escalate to CD for protocol-level review.
+
+### File metrics
+
+- BLOCKING items found pass-3: 17 raw, 12 unique
+- Recommended: 16
+- Nice-to-have: 13
+- Pass-2 fixes verified holding: 8 (D.1 reformulation, AC-R5 float, R9 atomic, R13 Editor guard, AC count math, R12 firing order, two-tier bg_expiry, UnloadUnusedAssets in R6)
+- New OQs proposed: 1 (OQ-21 iOS OnApplicationFocus)
+- OQs closeable: 1 (OQ-1 LoadSceneParameters per unity-specialist verification)
+
+### Next step
+
+**Pass-4 author-led revision in fresh session** (`/clear` recommended; this session ran 5 parallel specialists + CD synthesis). Apply all 12 BLOCKING + 4 high-priority RECOMMENDED items. Pass-4 then runs as verification-only re-review. Architecture is stable; pass-3 verifies implementation-contract layer the same way pass-2 verified formula-coherence layer.
+
+---
+
