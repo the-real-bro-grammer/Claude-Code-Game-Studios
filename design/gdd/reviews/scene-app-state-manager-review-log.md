@@ -272,3 +272,115 @@ None at pass-4 (no fresh spawn). Pass-3 single disagreement (bg_expiry tier prop
 
 ---
 
+## Review — 2026-04-28 — Verdict: APPROVE-WITH-CONDITIONS (pass-5)
+
+**Pass:** 5 (third formal `/design-review`; verification-only scope per pass-3/pass-4 protocol)
+**Scope signal:** S (small) — ~6h author-led pass-6 surgical revision (2h BLOCKING + 4h RECOMMENDED); pass-6 verification-only against explicit fix-list; pass-7 should not be needed
+**Specialists:** unity-specialist + performance-analyst + systems-designer + qa-lead + game-designer (parallel spawn) + creative-director (synthesis)
+**Pass-3 BLOCKING items verified:** 12 / 12 LANDED CORRECTLY
+**Pass-3 high-priority RECOMMENDED verified:** 4 / 4 LANDED CORRECTLY
+**New BLOCKING items:** 5 (per CD adjudication of 3 specialist severity disagreements)
+**New RECOMMENDED items:** 16
+**Pillar fantasy alignment:** All three Section B fantasies (Retry-as-beat / Cold-start ready / Seams calm) preserved across pass-4 revision
+
+### CD synthesis verdict (quoted)
+
+> "The spec is asymptotic to perfection. Pass-2 found 12 architectural BLOCKING; pass-3 found 12 contract-layer BLOCKING; pass-5 finds 5 line-edit BLOCKING + 16 surgical RECOMMENDED. Defect amplitude is collapsing pass-over-pass. All three Section B fantasies remain preserved. All 12 pass-3 BLOCKING items verified landed correctly. The diagnostic finding is the AC-BOOT-FEPM bit-encoding miss — a doubly-recursive defect where the test designed to prevent false-positive coverage was itself false-positive. Pass-4 author-led revision is sound for *applying* known fixes but fails when the fix introduces new engine-API claims. Engine claims need engine review. Two more days for surgical pass-6 + targeted unity-specialist verification ships this Foundation GDD with battle-tested protocol learnings benefiting the next 15 GDDs. Ship it through pass-6. Close with confidence."
+
+### Specialist disagreements (3 — all CD-adjudicated)
+
+1. **D.5 sums-of-ceilings arithmetic at line 456**: systems-designer BLOCKING vs performance-analyst ADVISORY. **CD: BLOCKING.** Rationale: formula correctness is canonical contract; runtime DEVELOPMENT_BUILD log is mitigation, not fix. "Specs document truth; runtime logs document drift from truth. A spec that doesn't document truth has nothing for runtime logs to drift *from*."
+2. **AC-R10c / AC-R10d stale variable name `bg_session_expiry_seconds` at lines 671-672**: qa-lead BLOCKING vs systems-designer + game-designer RECOMMENDED. **CD: BLOCKING.** Rationale: An AC is a test specification. "If a developer reading the AC in isolation cannot determine which variable to assert against without cross-referencing two other sections, the AC is non-implementable as written." Pass-3 REC-8 deferred this; pass-4 chose not to fix; the bet must be paid now or the defect ships.
+3. **AC-R9e tier ADVISORY vs PLAYMODE**: qa-lead + game-designer RECOMMENDED PLAYMODE. **CD: BLOCKING PLAYMODE.** Rationale: Tier should follow failure severity. Missing double-unpause guard creates same permanent `Time.timeScale=0f` freeze as missing double-pause guard (AC-R9a is BLOCKING CI PLAYMODE). Asymmetry is unjustified.
+
+### 5 BLOCKING items (pass-6 fix list)
+
+| # | Blocker | Source | Required Fix Direction | Est. |
+|---|---------|--------|------------------------|------|
+| 1 | AC-BOOT-FEPM bit-encoding error line 654 | unity-specialist NEW-P5-B1 | `m_EnterPlayModeOptions: 2` encodes `DisableSceneReload`, NOT `DisableDomainReload`. Unity 6 enum: `DisableDomainReload = 1`, `DisableSceneReload = 2`. Correct value for domain-only-disable is `1`; for both disabled is `3`. Pick one (CD recommends `1` for domain-only) and fix. | 30 min |
+| 2 | AC-BOOT-FEPM CI prerequisite enforcement gap | qa-lead BC-1 | Add `[SetUp]` assertion `Assert.IsTrue(EditorSettings.enterPlayModeOptionsEnabled && EditorSettings.enterPlayModeOptions == EnterPlayModeOptions.DisableDomainReload)` to test fixture spec. Specify two sub-cases (Scene Reload enabled vs disabled) as separate test fixtures. | 30 min |
+| 3 | AC-R10c / AC-R10d stale variable lines 671-672 | qa-lead BC-2 + systems-designer + game-designer NI-1 (3-way convergent) | Replace `bg_session_expiry_seconds` with the three tier-specific variable names (`bg_expiry_general_seconds`, `bg_expiry_in_prep_seconds`, `bg_expiry_in_rush_seconds`). Split each AC into 3 fixtures (one per tier) OR add explicit "Test against the applicable tier threshold" sentence. | 30 min |
+| 4 | D.5 sums-of-ceilings arithmetic error line 456 | systems-designer NEW BLOCKING + performance-analyst NEW-PA-3 | Change "1000+500+1500+800 = 3800ms" to "2000+500+1500+800 = 4800ms" (use Section G safe-range max for `T_dr_ceiling` not D.5 variable-table current value). Recompute "+800ms margin" rationale against correct sum (the +800 figure becomes negative or requires re-thinking the invariant). | 15 min |
+| 5 | AC-R9e tier promotion ADVISORY → BLOCKING PLAYMODE | qa-lead + game-designer convergent | Change tier label at line 667 from `**ADVISORY (PLAYMODE)**` to `**BLOCKING CI (PLAYMODE)**` (or `**PLAYMODE**` if BLOCKING CI is excessive — CD recommends BLOCKING PLAYMODE). Update Gate Summary tier sums: ADVISORY 3→2, BLOCKING CI PLAYMODE 9→10. Total stays 49. | 5 min |
+
+### 16 RECOMMENDED items (pass-6 fix list — surgical line edits)
+
+| # | Item | Source | Est. |
+|---|------|--------|------|
+| R1 | AC-R9f tolerance band 2MB → 5MB (Mali-G52 Mono GC noise floor) | performance-analyst | 10 min |
+| R2 | AC-R9f baseline timing disambiguation (post-warm-up unpause) | performance-analyst | 10 min |
+| R3 | RequestUnpause Pillar 5 latency bound — new ADVISORY AC | performance-analyst | 30 min |
+| R4 | R11 cold-cache `T_sm_overrun >= T_slack_budget` distinct-severity advisory log | performance-analyst | 15 min |
+| R5 | `bg_expiry_general_seconds` 60s revisit for BiomeMap/Shop context | performance-analyst | 20 min |
+| R6 | D.2 zero-handlers documentation (`max(empty)` → 0; `Task.WhenAll([])`) | systems-designer | 5 min |
+| R7 | D.5 per-sibling boot timeout — new rule clause for R2 hang protection | systems-designer | 30 min |
+| R8 | R13 / E9 quit-during-loading documentation — new edge case | systems-designer | 20 min |
+| R9 | AC-R7 dual-bound [120, 130) ambiguity — widen check (b) to ≤140ms | qa-lead | 15 min |
+| R10 | AC-R10b condition (c) no-op — rewrite as positive state assertion or remove | qa-lead | 5 min |
+| R11 | AC-R12d location promotion to H.3 PLAYMODE DEFERRED | qa-lead | 10 min |
+| R12 | AC-R9e coverage-gap stale entry line 749 — delete | game-designer NI-2 | 2 min |
+| R13 | Test file paths in Shift-Left notes (REC-5 from pass-3) | qa-lead | 20 min |
+| R14 | OQ-1 close (`LoadSceneParameters` unchanged in Unity 6.3 LTS per pass-5 unity-specialist verification) | unity-specialist | 5 min |
+| R15 | OQ-21 fold-in: iOS escalation path documentation (short-call→long-call sequence safe but undocumented) | unity-specialist + game-designer | 15 min |
+| R16 | PauseOverlay teardown on bg-expiry eject documentation | game-designer | 15 min |
+
+**Total pass-6 author-revision time: ~6 hours (2h BLOCKING + 4h RECOMMENDED).**
+
+### Diagnostic finding (CD)
+
+The **AC-BOOT-FEPM bit-encoding miss** is the diagnostic finding of this entire review cycle.
+
+The pass-4 author was applying 12 BLOCKING + 4 RECOMMENDED in a verification-only revision. They produced new AC text including bit-encoded EditorSettings flags. **No specialist verified the bit values against Unity 6 source-of-truth before pass-5.** unity-specialist caught it on pass-5; absent that spawn, it would have shipped to Story 1, where a developer would have implemented the test, watched it pass, and shipped a build with EnterPlayMode false-positive coverage gating CI. The defect that AC-BOOT-FEPM exists to prevent would silently NOT be detected.
+
+This is the canonical case for **specialist verification of newly-authored implementation-contract details**. Author-led revisions are correct for *applying* known fixes — the pass-4 methodology was sound for resolving items that were already specified. It fails when the fix itself introduces a new claim about engine behavior. The author is not an engine specialist; engine claims need engine review.
+
+CD characterization: "doubly-recursive test correctness defect" — the test designed to prevent false-positive coverage was itself a false-positive coverage instance. The methodology lesson: **when authoring a regression-prevention test, the test's own correctness is the regression risk.** Recursion stops only when an independent specialist closes the loop.
+
+### Strategic recommendation (CD): Implementation-Contract Verification gate
+
+Pass-3 already added unity-specialist + performance-analyst as defaults for Foundation GDDs in `/design-system`. Pass-5 reinforces this and adds a second protocol-level recommendation:
+
+**Add an "Implementation-Contract Verification" gate between author-led revisions and final approval, scoped narrowly:**
+
+When an author-led revision (any pass) adds or modifies an AC clause that asserts:
+- Engine API bit values, enum encodings, serialization formats
+- Platform-specific lifecycle event ordering (iOS/Android backgrounding, focus, etc.)
+- Frame-budget numeric thresholds
+- Memory/GC tolerance bands
+
+…spawn the relevant specialist (unity-specialist for engine; performance-analyst for budgets/memory; android-specialist or ios-specialist if those exist) for a **targeted verification** — not a full review, just a verify-the-claim ping. The specialist returns CORRECT / INCORRECT / NEEDS_CLARIFICATION on each flagged clause.
+
+This gate would have caught AC-BOOT-FEPM bit-encoding in pass-4 before pass-5 even ran. Time cost: ~10 min per gate invocation. Defect cost prevented: a CI gate silently passing on broken builds.
+
+**Recommend updating `/design-system` and `/design-review` to include this gate by default in `full` review mode for any Foundation GDD that includes engine-API or platform-lifecycle ACs.**
+
+### Pillar fantasy alignment audit (game-designer)
+
+All three Section B fantasies verified preserved by all 5 specialists:
+
+- **"Retry is a beat, not a load screen"** — PRESERVED. R11 budget split unchanged; D.1 per-term overruns are additive diagnostics, not behavior changes; T_retry_max = 2000ms holds. The 200ms gap between tone target (1500ms "let's go again") and nominal warm-cache retry (~1700ms) is a known calibration item, not a spec defect.
+- **"The game is already running when the player gets there"** — PRESERVED. iOS phone-call path (pass-3 BLOCKING #4) directly addressed the one identified threat. Boot-sequence fixes (R2, R2.a, R2.b, R13) intact. OQ-21 captures remaining device-test uncertainty.
+- **"The seams are where the chaos isn't"** — PRESERVED. Most threatened in pass-3; pass-4 fixes (B1 user-pause preservation + B2 Prep tier 600s) directly resolved the violations. Residual PauseOverlay teardown gap on eject-from-paused-state is not a Section B violation — it self-corrects via R14.a.
+
+### File metrics
+
+- Lines: ~880 (pass-4) → expected ~880 (pass-6 line edits should net out roughly even — some additions for new ACs, some deletions for stale entries)
+- ACs: 49 (unchanged at pass-5; pass-6 fix #5 keeps total at 49 via tier rebalance; new RequestUnpause Pillar 5 AC adds +1 if applied → 50)
+- OQs: 21 (pass-6 closes OQ-1; folds new content into OQ-21; net 20-21)
+- Pass-3 BLOCKING items verified holding: 12 / 12
+- Pass-3 high-priority RECOMMENDED verified holding: 4 / 4
+- New BLOCKING items found pass-5: 5 (CD-adjudicated)
+- New RECOMMENDED items pass-5: 16
+- New OQ proposals pass-5: 0 (existing OQ-21 expanded scope with iOS escalation note)
+- Specialist disagreements adjudicated: 3 (D.5 arithmetic; AC-R10c/d severity; AC-R9e tier)
+
+### Validation criteria for pass-6
+
+Pass-6 should be a verification pass of the explicit fix-list above. Per CD: "Author should explicitly mark each item as resolved with line references, the same discipline as pass-4." Targeted unity-specialist verification (10-min ping) of the AC-BOOT-FEPM bit encoding correction. CD verification (no new spawns) of the full pass-6 diff. If clean, **APPROVED** without conditions.
+
+### Next step
+
+**Pass-6 author-led revision in fresh session** (`/clear` recommended; this session ran 5 parallel specialists + CD synthesis). Apply all 5 BLOCKING + 16 RECOMMENDED items per the fix table above. Pass-6 then runs as verification-only re-review with **mandatory targeted unity-specialist verification** of the AC-BOOT-FEPM bit-encoding correction (Implementation-Contract Verification gate prototype). Auto-promotes to full APPROVED on condition application per CD pass-6 verdict rule.
+
+---
+
