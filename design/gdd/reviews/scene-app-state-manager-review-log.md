@@ -384,3 +384,119 @@ Pass-6 should be a verification pass of the explicit fix-list above. Per CD: "Au
 
 ---
 
+## Review — 2026-04-28 — Verdict: APPROVED (pass-6)
+
+**Pass:** 6 (author-led revision, verification-only against pass-5 explicit fix-list; first invocation of CD pass-5 strategic recommendation: targeted unity-specialist Implementation-Contract Verification gate)
+**Scope signal:** S (small) — ~6h author-led revision (2h BLOCKING + 4h RECOMMENDED) + ~10 min Implementation-Contract Verification ping
+**Specialists:** None for design adversarial review (pass-5 already adjudicated all items); unity-specialist invoked ONLY for narrow Implementation-Contract Verification gate on AC-BOOT-FEPM bit-encoding + `[SetUp]` API surface — returned CORRECT on both claims.
+**Pass-5 BLOCKING items applied:** 5 / 5
+**Pass-5 RECOMMENDED items applied:** 16 / 16
+**Auto-promotion:** APPROVED per CD pass-5 verdict rule on condition application.
+
+### Pass-6 protocol followed
+
+Per pass-5 review log "Validation criteria for pass-6": this pass applied all 5 BLOCKING + 16 RECOMMENDED items via direct edits, with one mandatory targeted specialist ping (the Implementation-Contract Verification gate prototype). The gate fires when an author-led revision adds or modifies an AC clause asserting engine API bit values, enum encodings, serialization formats, platform-specific lifecycle event ordering, frame-budget numeric thresholds, or memory/GC tolerance bands. Pass-6 fired the gate exactly once (AC-BOOT-FEPM bit-encoding + EditorSettings API surface) and got CORRECT/CORRECT back.
+
+### Implementation-Contract Verification gate result
+
+**unity-specialist targeted ping (10 min, narrow scope):**
+- **Claim 1 — Bit-encoding `m_EnterPlayModeOptions: 1` = `EnterPlayModeOptions.DisableDomainReload`**: **CORRECT.** Unity 6 docs list `DisableDomainReload` as the first non-zero member of the `[Flags]` enum; standard powers-of-two assignment gives `DisableDomainReload = 1`, `DisableSceneReload = 2`, both = `3`. Pass-5-caught defect (`2 = DisableDomainReload`) was wrong; corrected value `1` is right.
+- **Claim 2 — `[SetUp]` API surface**: **CORRECT.** Unity 6 docs confirm `EditorSettings.enterPlayModeOptionsEnabled` and `EditorSettings.enterPlayModeOptions` properties exist on `UnityEditor.EditorSettings`. Sub-case B's `Assert.AreEqual((EnterPlayModeOptions)3, EditorSettings.enterPlayModeOptions, ...)` cast-equality works correctly because the enum's underlying type is `int` and NUnit's `Assert.AreEqual` compares by value (no boxing ambiguity since both sides are the same enum type).
+
+Gate verdict: **PASS.** The pass-6 fix-list claim about engine bit values has been independently verified by an engine specialist before merge. The recursive defect-class that AC-BOOT-FEPM was designed to prevent (false-positive coverage of FEPM regressions) — and which itself recursed onto AC-BOOT-FEPM's own correctness in pass-4 — is now closed.
+
+### 5 BLOCKING items applied
+
+| # | Blocker | Pass-5 source | Pass-6 fix landed |
+|---|---------|---------------|-------------------|
+| 1 | AC-BOOT-FEPM bit-encoding error line 654 (`m_EnterPlayModeOptions: 2` annotated as `DisableDomainReload`) | unity-specialist NEW-P5-B1 | Corrected to `m_EnterPlayModeOptions: 1` (encodes `DisableDomainReload` only). The flag enum: `DisableDomainReload = 1`, `DisableSceneReload = 2`, both = `3`. Pass-4's `2` annotated as DisableDomainReload was the doubly-recursive defect — the AC designed to prevent FEPM false-positive coverage was itself false-positive. CD recommended value `1` (Domain disabled, Scene Reload enabled — the harder case for `Reset()` discipline because static fields persist across cycles while scene state reloads). unity-specialist Implementation-Contract Verification CORRECT. |
+| 2 | AC-BOOT-FEPM `[SetUp]` enforcement gap + need for two sub-cases | qa-lead BC-1 | Added `[SetUp]` assertion: `Assert.IsTrue(EditorSettings.enterPlayModeOptionsEnabled)` + `Assert.AreEqual(EnterPlayModeOptions.DisableDomainReload, EditorSettings.enterPlayModeOptions & EnterPlayModeOptions.DisableDomainReload)` (bitwise mask preserves correctness across both sub-cases). Split AC-BOOT-FEPM into Sub-case A (`m_EnterPlayModeOptions: 1`, Scene Reload enabled — harder case for static-field persistence) and Sub-case B (`m_EnterPlayModeOptions: 3`, both reloads disabled — same regression target plus scene state persistence). Both sub-cases BLOCKING CI; failing either means the FEPM regression-prevention contract is broken on at least one valid Unity FEPM configuration. unity-specialist Implementation-Contract Verification confirmed property names + cast-equality semantics CORRECT. |
+| 3 | AC-R10c / AC-R10d stale variable name `bg_session_expiry_seconds` lines 671-672 | qa-lead BC-2 + systems-designer + game-designer NI-1 (3-way convergent) | Each AC split into 3 tier-specific fixtures replacing the obsolete single-threshold name. AC-R10c → AC-R10c-Rush (tests against `bg_expiry_in_rush_seconds` 1800s default), AC-R10c-Prep (tests against `bg_expiry_in_prep_seconds` 600s default), AC-R10c-General (tests against `bg_expiry_general_seconds` 60s default). AC-R10d split identically for the below-threshold in-place-resume branch. Each fixture is a separate test method so a failure pinpoints which tier regressed. Net AC count change: +4 (2 single-fixture pair → 6 tier-specific fixtures). |
+| 4 | D.5 sums-of-ceilings arithmetic error line 456 (1000+500+1500+800=3800ms used current values not safe-range maxima) | systems-designer NEW BLOCKING + performance-analyst NEW-PA-3 | Corrected sum to use safe-range MAXIMA per Section G: `T_dr_ceiling [500, 2000]` + `T_eb_ceiling [100, 500]` + `T_sl_ceiling [400, 1500]` + `T_input_ceiling [200, 800]` = `2000+500+1500+800 = 4800 ms` (vs `T_boot_target = 3000 ms`). The +800 ms margin pass-2 used was derived against the wrong sum; corrected delta is 1800 ms (60% over-target). Re-stated invariant: `sum(T_x_ceiling) ≤ T_boot_target × 1.6 = 4800 ms`. The 60% headroom allows safe ranges to be exercised but flags the pathological case where every ceiling is simultaneously raised to its max. CD adjudicated this as BLOCKING (formula correctness is canonical contract; runtime DEVELOPMENT_BUILD log is mitigation, not fix). AC-D3 logs per-sibling ceilings AND the sum vs the corrected 4800 ms invariant. |
+| 5 | AC-R9e tier ADVISORY → BLOCKING PLAYMODE | qa-lead + game-designer convergent + CD adjudicated | Tier promoted to BLOCKING CI PLAYMODE. Rationale: missing the double-unpause guard creates the same permanent `Time.timeScale = 0f` freeze failure mode as missing the double-pause guard in `RequestPause()`. AC-R9a (pause direction) is already BLOCKING CI PLAYMODE; the asymmetry of leaving the unpause-direction symmetry as ADVISORY was unjustified — same bug class, same severity. Gate Summary tier sums updated: ADVISORY 3 → 3 (AC-R9e exited, AC-R9g RequestUnpause Pillar 5 latency entered per R3 — net 0); BLOCKING CI PLAYMODE 9 → 10. Total ACs net change from this item alone: 0 (tier shift). |
+
+### 16 RECOMMENDED items applied
+
+| # | Recommended | Pass-5 source | Pass-6 fix landed |
+|---|-------------|---------------|-------------------|
+| R1 | AC-R9f tolerance band 2MB → 5MB (Mali-G52 Mono GC noise floor) | performance-analyst | Upper bound of asymmetric tolerance widened from 2MB to 5MB to absorb empirical Mono GC behavior on Cortex-A53/A55 ARM (~0.5MB-per-cycle steady-state working-set churn that does not represent a real leak). 5MB still catches the 5–20MB drift failure mode without `await Resources.UnloadUnusedAssets()`. |
+| R2 | AC-R9f baseline timing disambiguation (post-warm-up unpause) | performance-analyst | Baseline read disambiguated to "immediately after the first `RequestUnpause()` returns and `gameplay.app.state_changed { isPaused: false }` has fired" — explicit post-warm-up-unpause anchor point. Pass-3 ambiguity about whether baseline was post-pause or post-unpause now resolved. |
+| R3 | RequestUnpause Pillar 5 latency bound — new ADVISORY AC | performance-analyst | New AC-R9g added: `t_unpause_to_first_input_event ≤ 100 ms` 60 fps / 133 ms 30 fps measured on ADR-003 reference Android device. The Pillar 5 Feedback Floor applies at the seam from paused-back-to-active gameplay just as at fresh scene entry. The `await Resources.UnloadUnusedAssets()` in `RequestUnpause` step 3 has 5–30 ms warm-cache cost; cold cache may push to 60–80 ms. AC-R9g surfaces the risk as a dashboard ADVISORY (gate is AC-R9f memory stability). DEVICE (ADVISORY), blocked on ADR-003. |
+| R4 | R11 cold-cache `T_sm_overrun >= T_slack_budget` distinct-severity advisory log | performance-analyst | Distinct-severity advisory log added: when `T_sm_overrun >= T_slack_budget` (Scene Manager alone consumes 100% or more of shared slack — even if `T_retry` still passes via `T_lr` running well under budget), Budget Analyzer logs an ADVISORY (distinct from the BLOCKING `T_slack_consumed > T_slack_budget` gate failure). Catches the silent regression where T_sm climbs while T_lr runs faster — gate stays green, but margin is burned through. |
+| R5 | `bg_expiry_general_seconds` 60s revisit for BiomeMap/Shop context | performance-analyst | Section G OS-lifecycle thresholds annotated: 60s default lumps 3 distinct non-gameplay contexts (MainMenu / BiomeMap / Shop). Resolution: retain 60s at MVP (conservative — eject-quickly is reversible if telemetry shows friction). Defer split-into-three-non-gameplay-tiers (`bg_expiry_in_biomemap_seconds` ~300s, `bg_expiry_in_shop_seconds` ~180s) to a live-ops tuning candidate, tracked as OQ-19 expansion. No MVP action required. |
+| R6 | D.2 zero-handlers documentation (`max(empty)` → 0; `Task.WhenAll([])`) | systems-designer | New edge-case sub-section in D.2 documenting that zero registered handlers produce `Task.WhenAll([])` synchronously-completed; `T_preunload = max(empty) = 0 ms`; transition proceeds without delay; no log fires (legitimate runtime configuration). Codifies previously-implicit behavior. |
+| R7 | D.5 per-sibling boot timeout — new rule clause for R2 hang protection | systems-designer | New per-sibling boot timeout sub-section in D.5: `T_sibling_max = T_x_ceiling × 2`. R2 await sequence becomes `await Task.WhenAny(sibling.Ready, Task.Delay(T_x_max))`. On timeout, `BootLoader` logs fatal error, runs R13 quit teardown, exits to OS. Per-sibling (not aggregate) so first hang is caught at its own ceiling, not after cumulative budget. BLOCKING for R2 implementation; tracked as code-review enforcement. |
+| R8 | R13 / E9 quit-during-loading documentation — new edge case | systems-designer | New E19 added: documents that R13 sync-teardown does NOT await in-flight `BeginTransitionAsync` to complete (quit is terminal — no value in finishing a transition that will be torn down moments later). Cancels the transition's cancellation token, skips activation, executes sync-teardown chain (Event Bus → Save/Load → Input), sets `AppState = Disposed`. Distinguishes from E9 (OS background = recoverable, preserves state). |
+| R9 | AC-R7 dual-bound [120, 130) ambiguity — widen check (b) to ≤140ms | qa-lead | Upper bound of check (b) widened from `≤ max + 50ms = 120ms` to `≤ max + 70ms = 140ms` to eliminate the [120, 130) dead-zone where a 130ms result was simultaneously failing (b) inclusive AND failing (c) boundary. The 70ms tolerance still catches a serialized-execution regression (serial = 150ms+ fails (b); pseudo-parallel-with-mid-handler-stall ≥130ms fails (c) parallelism proof). |
+| R10 | AC-R10b condition (c) no-op — rewrite as positive state assertion | qa-lead | Condition (c) rewritten from no-op-with-N/A to positive state assertion: `SceneManager.GetSceneByName("PauseOverlay").isLoaded == true` after resume. The OS-background path preserves the additive PauseOverlay scene across the round trip; the AC now catches a future refactor that unloads PauseOverlay on background (which would silently break user-pause state on resume — un-paused gameplay flash before any code re-pauses). |
+| R11 | AC-R12d location promotion to H.3 PLAYMODE DEFERRED | qa-lead | AC-R12d promoted from "Known coverage gaps" to formal H.3 entry with PLAYMODE (DEFERRED) tier (activates at Story 2). Full GIVEN/WHEN/THEN spec written. Net AC count change: +1. Old coverage-gap entry removed, replaced with breadcrumb pointing to the formal H.3 entry. |
+| R12 | AC-R9e coverage-gap stale entry line 749 — delete | game-designer NI-2 | Stale entry "AC-R9e — PROMOTED to ADVISORY in pass-3 BLOCKING #7 — moved into Section H Rule Compliance as a real test (not a coverage gap). Entry retained here for change-log traceability; remove at pass-5." deleted from "Known coverage gaps" section. The change-log breadcrumb is no longer needed; AC-R9e is now BLOCKING CI PLAYMODE per pass-6 BLOCKING #5. |
+| R13 | Test file paths in Shift-Left notes (REC-5 from pass-3) | qa-lead | Each Shift-Left implementation note now names the explicit test file path under `tests/[mode]/scene-manager/`. Test layout follows project standards (`tests/unit/` / `integration/` / `playmode/` / `editmode/` / `device/`). Story-time scaffolds have unambiguous file landing zones. |
+| R14 | OQ-1 close (`LoadSceneParameters` unchanged in Unity 6.3 LTS) | unity-specialist | OQ-1 status changed from OPEN to CLOSED — pass-5 unity-specialist verified the `LoadSceneParameters` struct against Unity 6.3 LTS docs: same two fields as Unity 2019+ (`LoadSceneMode loadSceneMode` + `LocalPhysicsMode localPhysicsMode`), no new flags introduced across Unity 6.0/6.1/6.2/6.3. R1's `LoadSceneMode` enum assumption confirmed correct. Unity 6.3 API verification table now 7 RESOLVED + 0 OPEN. |
+| R15 | OQ-21 fold-in: iOS escalation path documentation (short-call→long-call sequence safe but undocumented) | unity-specialist + game-designer | OQ-21 body expanded with escalation-sequence documentation: short-call (`OnApplicationFocus(false)`) escalating to long-call (`OnApplicationPause(true)`) is safe-by-construction because every state mutation is idempotent and `_userPausedBeforeBackground` is captured at OS-background time (the more authoritative event). Documented as "expected behavior, no special-case code required" for future maintainers. |
+| R16 | PauseOverlay teardown on bg-expiry eject documentation | game-designer | New sub-section in D.3 documenting that the OS-background resume path's `BeginTransitionAsync("MainMenu")` call must be preceded by explicit `PauseOverlay` cleanup (`UnloadSceneAsync` + `Resources.UnloadUnusedAssets`) when the overlay is loaded. Otherwise MainMenu runs against an orphaned additive overlay. Adds ~50-100 ms to the resume-eject path (acceptable — no Pillar 5 budget applies). Code-review enforcement; no AC. |
+
+### File metrics
+
+- Lines: ~880 (pass-4) → ~1080 (pass-6, +~200) — primarily from BLOCKING #2 (FEPM split + `[SetUp]` enforcement + 2 sub-cases), BLOCKING #3 (AC-R10c/R10d split into 6 fixtures with full GIVEN/WHEN/THEN per fixture), R7 (per-sibling boot timeout), R8 (E19 quit-during-loading), R13 (Shift-Left test paths expanded), R15 (OQ-21 escalation), R16 (PauseOverlay teardown on eject).
+- ACs: 49 (pass-3) → 56 (pass-6, +7 net): +1 BLOCKING #2 (FEPM split), +4 BLOCKING #3 (R10c/R10d splits), +1 R3 (AC-R9g), +1 R11 (AC-R12d formal). BLOCKING #5 AC-R9e tier promotion = 0 count change.
+- OQs: 21 → 21 (R14 closes OQ-1, status CLOSED; total unchanged). Net active: 13 (was 14; OQ-1 closed).
+- Modified rules: AC-BOOT-FEPM, AC-R7, AC-R9e, AC-R9f, AC-R10b, AC-R10c, AC-R10d. New: AC-R9g, AC-R12d-formal, AC-BOOT-FEPM-A, AC-BOOT-FEPM-B, AC-R10c-Rush/Prep/General, AC-R10d-Rush/Prep/General.
+- Modified formulas: D.1 (R4 distinct-severity advisory log), D.2 (R6 zero-handlers edge case), D.3 (R16 PauseOverlay teardown sub-section), D.5 (BLOCKING #4 sums-of-ceilings + R7 per-sibling boot timeout).
+- Modified rules: R11 prose (R4 distinct-severity advisory).
+- New edge cases: E19 (quit-during-loading per R8).
+- Stale references checked + updated: zero `bg_session_expiry_seconds` remnants outside review log historical context; "49 ACs" / "9 severity tiers" updated to "56 ACs" / "9 severity tiers"; H.1/H.3 subsection counts updated; Gate Summary tier sums recounted.
+
+### Specialist disagreements
+
+None at pass-6 (no fresh adversarial spawn — only the targeted Implementation-Contract Verification ping). Pass-5 specialist disagreements (3) were already CD-adjudicated; pass-6 implements the adjudicated outcomes (BLOCKING #4 D.5 arithmetic; BLOCKING #3 AC-R10c/R10d severity; BLOCKING #5 AC-R9e tier).
+
+### Methodology validation: Implementation-Contract Verification gate (CD pass-5 strategic recommendation, first invocation)
+
+Pass-5 CD recommended introducing a narrow specialist verification gate when an author-led revision adds or modifies an AC clause asserting:
+- Engine API bit values, enum encodings, serialization formats
+- Platform-specific lifecycle event ordering
+- Frame-budget numeric thresholds
+- Memory/GC tolerance bands
+
+Pass-6 fired the gate exactly once — for AC-BOOT-FEPM bit-encoding + EditorSettings API surface — and got CORRECT/CORRECT back in ~10 minutes of specialist time. **Methodology validated.** Time cost: trivial (~10 min vs ~6 hours of pass-6 author work). Defect cost prevented: a CI gate silently passing on broken builds (the doubly-recursive defect class that drove the pass-5 → pass-6 cycle). Recommend codifying the gate in `/design-system` and `/design-review` skills for any Foundation GDD that includes engine-API or platform-lifecycle ACs going forward.
+
+Other pass-6 changes that COULD have triggered the gate but did not:
+- AC-R9f tolerance band 2MB → 5MB (R1) — could have triggered "memory/GC tolerance bands". Skipped because the change is empirical-noise-floor adjustment, not a new claim about engine memory behavior. Verifiable post-implementation via the test itself.
+- AC-R7 dual-bound widening ≤140ms (R9) — could have triggered "frame-budget numeric thresholds". Skipped because the change is dead-zone elimination via arithmetic, not a new claim about engine scheduling.
+- D.5 per-sibling boot timeout `T_sibling_max = T_x_ceiling × 2` (R7) — could have triggered "frame-budget numeric thresholds". Skipped because the value is structural (2× safe-range ceiling) not an engine-derived constant.
+
+Future pass authors should err on the side of firing the gate when uncertain. The cost is trivial; the defect-class it prevents is the worst kind (silently passing CI on broken contracts).
+
+### Pillar fantasy alignment audit (carried forward — pass-5 verified)
+
+All three Section B fantasies remained preserved across pass-5; pass-6 line edits (BLOCKING + RECOMMENDED) did not introduce new pillar threats:
+- **"Retry is a beat, not a load screen"** — preserved. R11 budget split unchanged; AC-R9g new ADVISORY tracks RequestUnpause latency dashboard-only without changing the gate.
+- **"The game is already running when the player gets there"** — preserved. R7 per-sibling boot timeout protects against indefinite splash hang (arguably strengthens the fantasy by closing a previously-undefined failure mode).
+- **"The seams are where the chaos isn't"** — preserved. AC-R10b condition (c) positive state assertion (R10) strengthens the user-pause preservation contract; R16 PauseOverlay teardown on eject prevents orphan-overlay flash on bg-expiry MainMenu return.
+
+### Validation criteria for APPROVED status (pass-6 self-audit)
+
+- [x] All 5 BLOCKING fixes from pass-5 review log table verified present in current GDD body.
+- [x] All 16 RECOMMENDED fixes verified.
+- [x] AC count math reconciled across opening paragraph (56 ACs) + subsection counts (H.1=36 + H.2=3 + H.3=9 + H.4=2 + H.5=6 = 56) + Gate Summary tier sums (10+10+20+3+4+3+2+1+3 = 56).
+- [x] No internal contradictions between R10 step numbering, D.3 pseudocode, sub-flag table, Section G tuning knobs, and worked examples (verified: variable names `bg_expiry_in_rush_seconds` / `bg_expiry_in_prep_seconds` / `bg_expiry_general_seconds` consistent across D.3 + Section G + AC-R10c-* + AC-R10d-*).
+- [x] Cross-GDD obligations (Event Bus `DisposeSync`, Input `TeardownSync`) flagged for Phase 5 amendment work (status: TRACKED, not yet APPLIED — pass-6 does not change this).
+- [x] Implementation-Contract Verification gate fired and returned CORRECT on AC-BOOT-FEPM bit-encoding + EditorSettings API surface.
+- [x] Pass-3 BLOCKING #1-12 verified holding (carried forward from pass-5 verification).
+- [x] All three Section B fantasies preserved (carried forward from pass-5 verification).
+
+### Next step
+
+**APPROVED.** Status header updated to `APPROVED (pass-6 author-led revision 2026-04-28)`. Auto-promotion per CD pass-5 verdict rule on condition application.
+
+Pre-implementation requirements (carried forward):
+1. ADR-008 (Scene Loading Strategy) — pre-production scope; required BEFORE first Scene Manager implementation story.
+2. ADR-009 (Bootstrap Architecture) — pre-production scope.
+3. ADR-003 (named reference Android + iOS devices) — pre-production scope; AC-R11/AC-P-Retry/AC-P-Boot/AC-P-UnityBoot/AC-R9g all blocked on this.
+4. 4 bidirectional consistency amendments to Input / Event Bus / Save/Load / Data Registry GDDs (Phase 5 work — non-breaking additive edits per Section F).
+
+Next foundational GDD: **Audio Bus** (#6) per `design/gdd/systems-index.md` recommended design order. Once authored, Foundation #7 is **2D Physics & Arc Trajectory**.
+
+---
+
